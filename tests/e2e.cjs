@@ -1,4 +1,4 @@
-// End-to-end check of Tray against `vite preview` with the AI endpoint mocked.
+// End-to-end check of LiveBoard against `vite preview` with the AI endpoint mocked.
 // Usage: npx vite preview --port 4173 & node tests/e2e.cjs
 const { chromium } = require("playwright");
 const fs = require("fs");
@@ -49,15 +49,15 @@ const MOCK = intent => {
     await p.waitForSelector("#editor .pin");
     await p.screenshot({ path: `${OUT}/02-welcome.png` });
     await p.click("#editor .pin");
-    await p.waitForSelector(".mbox");
-    check(await p.isVisible(".mbox .mmsg.marker"), "seeded marker opens with its thread");
+    await p.waitForSelector(".mws");
+    check(await p.isVisible(".mws .ta.marker"), "seeded marker opens with its thread");
     await p.fill("#mIn", "e^0.5 * 0.5^4 / 4!");
     await p.press("#mIn", "Enter");
     await p.waitForSelector(".mcalc b");
     const calc = await p.textContent(".mcalc b");
     check(/0\.0042/.test(calc), `math runs locally and exactly (${calc})`);
     await p.keyboard.press("Escape");
-    check(!(await p.$(".mbox")), "Escape closes the marker box");
+    check(!(await p.$(".mws")), "Escape closes the marker box");
 
     // place a marker on a selection and ask the AI
     await p.evaluate(() => {
@@ -70,8 +70,8 @@ const MOCK = intent => {
     await p.waitForTimeout(200);
     check(await p.isVisible(".floatbtn.place"), "selecting text shows Place marker");
     await p.click(".floatbtn.place");
-    await p.waitForSelector(".mbox");
-    await p.click(".msugg button:has-text('Explain this simpler')");
+    await p.waitForSelector(".mws");
+    await p.click(".sugg button:has-text('Explain this simpler')");
     await p.waitForSelector(".mout[data-status='pending']");
     await p.screenshot({ path: `${OUT}/03-insert.png` });
     check(/0\.0042/.test(await p.textContent(".mout")), "AI insert lands in the note with the exact calc result");
@@ -81,14 +81,15 @@ const MOCK = intent => {
 
     // ask a question -> answer stays in the box, then Add to note
     await p.click("#editor .pin >> nth=1");
-    await p.waitForSelector(".mbox");
+    await p.waitForSelector(".mws");
     await p.fill("#mIn", "why is that?");
     await p.press("#mIn", "Enter");
-    await p.waitForSelector(".mbox .mlink");
+    await p.waitForSelector(".mws .mlink");
     const before = (await p.$$(".mout")).length;
-    await p.click(".mbox .mlink");
+    await p.click(".mws .mlink");
     await p.waitForTimeout(200);
     check((await p.$$(".mout")).length === before + 1, "Add to note writes an answer into the page");
+    await p.click("[data-tab='recall']");
     await p.click(".mastery button[data-m='2']");
     await p.waitForTimeout(250);
     check(await p.getAttribute("#editor .pin >> nth=1", "data-mastery") === "2", "mastery changes the dot");
@@ -99,7 +100,28 @@ const MOCK = intent => {
     await p.waitForTimeout(250);
     check(await p.isVisible(".floatbtn.plus"), "empty line shows the + marker button");
     await p.click(".floatbtn.plus");
-    await p.waitForSelector(".mbox .mquote.blank");
+    await p.waitForSelector(".mws blockquote.blank");
+    check(await p.getAttribute("[data-tab='write']", "aria-selected") === "true", "a blank marker opens on the Write tab");
+    await p.fill("#wDraft", "My own line: protons flow back through ATP synthase.");
+    await p.click("#wInsert");
+    await p.waitForTimeout(150);
+    check(await p.evaluate(() => [...document.querySelectorAll(".mout[data-status='accepted']")].some(x => /My own line/.test(x.textContent))), "Write tab inserts your own writing into the note");
+    await p.click("[data-tab='calc']");
+    await p.fill("#cIn", "23.4 mL * 0.1 mol/L");
+    await p.click("#cForm button");
+    await p.waitForTimeout(200);
+    const cout = await p.textContent("#cOut");
+    check(/2\.34 mmol|0\.00234 mol/.test(cout), `Calculate tab handles units exactly (${cout})`);
+    await p.click("[data-tab='related']");
+    const opts = await p.$$eval("#rSel option", os => os.map(o => o.value).filter(Boolean));
+    if (opts.length) { await p.selectOption("#rSel", opts[0]); await p.click("#rLink"); await p.waitForTimeout(150); }
+    check((await p.$$(".mws .lrow")).length >= 1, "Related tab links two markers");
+    await p.click("[data-tab='recall']");
+    await p.uncheck("#rcOn");
+    await p.waitForTimeout(100);
+    check(!!(await p.$(".chipm.off")), "a marker can be left out of recall");
+    await p.check("#rcOn");
+    await p.click("[data-tab='ask']");
     await p.fill("#mIn", "Outline this topic");
     await p.press("#mIn", "Enter");
     await p.waitForFunction(() => [...document.querySelectorAll(".mout")].some(x => x.textContent.includes("Outline")));
@@ -111,7 +133,7 @@ const MOCK = intent => {
     await p.fill("#mIn", "remind me tomorrow");
     await p.press("#mIn", "Enter");
     await p.waitForTimeout(200);
-    check((await p.textContent(".mbox")).includes("tomorrow"), "reminders are set locally");
+    check((await p.textContent(".mws")).includes("tomorrow"), "reminders are set locally");
     await p.keyboard.press("Escape");
 
     // format a single-line passage as a heading
@@ -206,11 +228,11 @@ const MOCK = intent => {
     await p.click("#info .openlink");
     await p.waitForSelector("#editor .pin");
     await p.click("#editor .pin");
-    await p.waitForSelector(".mbox.sheet");
+    await p.waitForSelector(".mws");
     await p.screenshot({ path: `${OUT}/08-phone-marker.png` });
     check(true, "phone: marker box opens as a bottom sheet");
     await p.click("#mClose");
-    check(!(await p.$(".mbox")), "phone: marker sheet closes");
+    check(!(await p.$(".mws")), "phone: marker sheet closes");
     await ctx.close();
   }
 

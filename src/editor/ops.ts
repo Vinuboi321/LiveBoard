@@ -44,7 +44,7 @@ export function contextAround(id: string) {
 }
 
 /** Write a marker's result into the note, right after the block that holds the marker. */
-export function insertOutput(id: string, markdown: string, extra: { mermaid?: string | null; calcLine?: string | null } = {}) {
+export function insertOutput(id: string, markdown: string, extra: { mermaid?: string | null; calcLine?: string | null; status?: "pending" | "accepted" } = {}) {
   if (!ed) return false;
   const p = findPin(id);
   if (p === null) return false;
@@ -54,7 +54,7 @@ export function insertOutput(id: string, markdown: string, extra: { mermaid?: st
   if (extra.calcLine) html += `<p><strong>${esc(extra.calcLine)}</strong></p>`;
   if (extra.mermaid) html += `<div data-diagram="" data-code="${esc(extra.mermaid)}"></div>`;
   if (!html) return false;
-  ed.chain().insertContentAt(insertAt, `<div data-marker-output="${esc(id)}" data-status="pending">${html}</div>`).run();
+  ed.chain().insertContentAt(insertAt, `<div data-marker-output="${esc(id)}" data-status="${extra.status || "pending"}">${html}</div>`).run();
   return true;
 }
 

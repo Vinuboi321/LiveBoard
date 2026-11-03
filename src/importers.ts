@@ -50,6 +50,6 @@ async function pdfToHtml(file: File) {
     flush();
   }
   if (doc.numPages > pages) html += `<p><em>Only the first ${pages} of ${doc.numPages} pages were imported.</em></p>`;
-  if (!html) throw new Error("That PDF has no selectable text. Scanned PDFs need OCR, which Tray doesn't do yet.");
+  if (!html) throw new Error("That PDF has no selectable text. Scanned PDFs need OCR, which LiveBoard doesn't do yet.");
   return html;
 }

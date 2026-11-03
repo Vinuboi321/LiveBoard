@@ -3,17 +3,17 @@ import type { Course, Marker, Meta, Note } from "./types";
 import { COURSE_COLORS, DAY, uid } from "./util";
 
 /* Local-first storage. Everything lives in IndexedDB and works offline; sync.ts mirrors it to Supabase when configured. */
-class TrayDB extends Dexie {
+class LiveBoardDB extends Dexie {
   notes!: Table<Note, string>;
   markers!: Table<Marker, string>;
   courses!: Table<Course, string>;
   meta!: Table<Meta, string>;
   constructor() {
-    super("tray");
+    super("liveboard");
     this.version(1).stores({ notes: "id, courseId, openedAt, updatedAt", markers: "id, noteId, due, updatedAt", courses: "id, updatedAt", meta: "key" });
   }
 }
-export const db = new TrayDB();
+export const db = new LiveBoardDB();
 
 type Kind = "notes" | "markers" | "courses" | "meta";
 type Listener = (kind: Kind) => void;
@@ -148,11 +148,11 @@ export async function ensureStarterCourse() {
 }
 
 export async function exportAll() {
-  return JSON.stringify({ app: "tray", version: 1, exportedAt: new Date().toISOString(), notes: [...state.notes.values()], markers: [...state.markers.values()], courses: [...state.courses.values()], meta: state.meta }, null, 2);
+  return JSON.stringify({ app: "liveboard", version: 1, exportedAt: new Date().toISOString(), notes: [...state.notes.values()], markers: [...state.markers.values()], courses: [...state.courses.values()], meta: state.meta }, null, 2);
 }
 export async function importAll(json: string) {
   const data = JSON.parse(json);
-  if (data.app !== "tray") throw new Error("That file isn't a Tray backup.");
+  if (data.app !== "liveboard") throw new Error("That file isn't a LiveBoard backup.");
   for (const c of data.courses || []) await putCourse({ ...c });
   for (const n of data.notes || []) await putNote({ ...n }, false);
   for (const m of data.markers || []) await putMarker({ ...m });

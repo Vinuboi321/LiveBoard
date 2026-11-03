@@ -26,7 +26,7 @@ export interface Note {
 }
 
 export interface ThreadMsg {
-  role: "user" | "marker";
+  role: "user" | "marker" | "self"; // self = the student's own answer or kept writing
   text: string; // markdown for marker replies
   at: number;
   inserted?: boolean; // this reply was written into the note
@@ -46,6 +46,9 @@ export interface Marker {
   due: number; // next recall time
   ivl: number; // spaced-repetition interval in days
   linkNoteId?: string | null;
+  links?: string[]; // other markers this one is connected to (two-way)
+  draft?: string; // unfinished writing in the Write tab
+  recallOff?: boolean; // left out of daily recall
   remindAt?: number | null;
   createdAt: number;
   updatedAt: number;

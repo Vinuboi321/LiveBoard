@@ -6,7 +6,7 @@ import Highlight from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
-import { closeBox, openBox, setOpenNote, TYPE_INFO } from "./markerBox";
+import { closeBox, openBox, setOpenNote, takePendingOpen, TYPE_INFO } from "./markerBox";
 import { pinIds, setEditor } from "./ops";
 import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
 import type { Note } from "../types";
@@ -273,6 +273,12 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   cleanup.push(() => removeEventListener("resize", onResize));
   unsub = onChange(k => { if (k === "markers") { repaintAll(); layoutRail(); } });
   setTimeout(layoutRail, 50);
+  const pend = takePendingOpen();
+  if (pend) setTimeout(() => {
+    const el = document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(pend)}"]`);
+    el?.scrollIntoView({ block: "center" });
+    openBox(pend, el, "related");
+  }, 120);
   if (!n.plain.trim() && n.title === "Untitled note") title.select();
 }
 

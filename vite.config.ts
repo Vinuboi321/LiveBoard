@@ -7,8 +7,8 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
       manifest: {
-        name: "Tray",
-        short_name: "Tray",
+        name: "LiveBoard",
+        short_name: "LiveBoard",
         description: "Study notes built around markers.",
         theme_color: "#5B4BFF",
         background_color: "#F4F2FF",
@@ -27,8 +27,8 @@ export default defineConfig({
         // Precache the app shell; diagram and PDF engines are cached the first time they're used.
         globPatterns: ["index.html", "assets/index-*.{js,css}", "*.{svg,png,webmanifest}", "icons/*.png"],
         runtimeCaching: [
-          { urlPattern: ({ url }) => url.pathname.startsWith("/assets/"), handler: "CacheFirst", options: { cacheName: "tray-assets", expiration: { maxEntries: 300 } } },
-          { urlPattern: ({ url }) => url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com", handler: "StaleWhileRevalidate", options: { cacheName: "tray-fonts" } }
+          { urlPattern: ({ url }) => url.pathname.startsWith("/assets/"), handler: "CacheFirst", options: { cacheName: "liveboard-assets", expiration: { maxEntries: 300 } } },
+          { urlPattern: ({ url }) => url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com", handler: "StaleWhileRevalidate", options: { cacheName: "liveboard-fonts" } }
         ]
       }
     })

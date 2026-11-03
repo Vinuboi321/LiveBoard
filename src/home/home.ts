@@ -38,7 +38,8 @@ export const setFocusNote = (id: string | null) => { focusNote = id; };
 const isDue = (m: Marker) => m.due <= Date.now();
 const hasDue = (noteId: string) => liveMarkers().some(m => m.noteId === noteId && isDue(m) && recallable(m));
 function recallable(m: Marker) {
-  if (m.type === "link") return false;
+  if (m.recallOff) return false;
+  if (m.type === "link" && !m.text) return false;
   return !!(m.text || m.recallQ || m.thread.some(t => t.role === "marker" && t.text && !t.text.startsWith("⚠")));
 }
 function curCourseId() {

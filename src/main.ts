@@ -81,17 +81,17 @@ async function seedWelcome() {
   await ensureStarterCourse();
   const cid = liveCourses()[0].id;
   const n = await newNote(cid, "Start here: how markers work", "blank", null);
-  const m = newMarker(n.id, "Markers are the only tool in Tray", "explain");
+  const m = newMarker(n.id, "Markers are the only tool in LiveBoard", "explain");
   m.thread = [
     { role: "user", text: "What can a marker do?", at: Date.now() },
     { role: "marker", text: "Anything you'd reach for a toolbar for. Type what you want in plain words: **explain**, **give an example**, **turn this into a list**, **draw a diagram**, **e^0.5 * 2**, **link to** another note, or **remind me Friday**. Results that belong in your notes are written in, tinted until you keep them.", at: Date.now(), inserted: true }
   ];
-  m.recallQ = "What is the one tool you use for everything in Tray?";
+  m.recallQ = "What is the one tool you use for everything in LiveBoard?";
   m.recallA = "Markers. Select text (or tap + on an empty line), then type what you want.";
   state.markers.set(m.id, m);
   await putMarker(m);
-  const html = `<h2>Welcome to Tray</h2>
-<p><span data-marker="${m.id}">Markers are the only tool in Tray</span><span data-pin="${m.id}"></span>. Tap the dot to open this one.</p>
+  const html = `<h2>Welcome to LiveBoard</h2>
+<p><span data-marker="${m.id}">Markers are the only tool in LiveBoard</span><span data-pin="${m.id}"></span>. Tap the dot to open this one.</p>
 <p>To place your own, select any words in this note and press <strong>Place marker</strong>. Then type what you want: explain it, expand it, calculate something, turn it into a list, draw it, or link it to another note.</p>
 <p>On an empty line, tap the <strong>+</strong> in the margin to write or generate from a marker, like "outline what I know about this topic".</p>
 <p></p>
@@ -115,5 +115,5 @@ async function boot() {
 
 boot().catch(err => {
   console.error(err);
-  stage().innerHTML = `<div class="fatal"><h2>Tray couldn't start</h2><p>${String(err?.message || err)}</p><p>If you're in a private window, storage may be blocked. Try a normal window.</p></div>`;
+  stage().innerHTML = `<div class="fatal"><h2>LiveBoard couldn't start</h2><p>${String(err?.message || err)}</p><p>If you're in a private window, storage may be blocked. Try a normal window.</p></div>`;
 });

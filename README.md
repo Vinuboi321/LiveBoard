@@ -1,8 +1,8 @@
-# Tray
+# LiveBoard
 
 A study notes app where **markers are the only tool**. Import a lecture or start a blank page, select any text (or tap **+** on an empty line), and type what you want in plain words. The marker explains, expands, calculates, reformats, draws, links or drafts, and anything that belongs in your notes is written into the page. Every marker tracks how well you know it, and each morning the home dial quizzes you on what you marked.
 
-Tray installs as an app on iPad, iPhone, Windows and Mac from the browser, and it works offline. Notes live on the device first. When accounts are set up, they also sync to Supabase.
+LiveBoard installs as an app on iPad, iPhone, Windows and Mac from the browser, and it works offline. Notes live on the device first. When accounts are set up, they also sync to Supabase.
 
 ## What's in it
 
@@ -41,8 +41,8 @@ You need three free accounts: **Supabase** (accounts and sync), an **Anthropic A
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor**, then **New query**. Paste all of `supabase/schema.sql` and click **Run**.
-3. Go to **Authentication → Providers**. Email is on by default, and Tray signs people in with magic links.
-4. Go to **Authentication → URL Configuration**. Set **Site URL** to your Vercel URL once you have it (for example `https://tray-yourname.vercel.app`), and add it under **Redirect URLs**.
+3. Go to **Authentication → Providers**. Email is on by default, and LiveBoard signs people in with magic links.
+4. Go to **Authentication → URL Configuration**. Set **Site URL** to your Vercel URL once you have it (for example `https://liveboard-yourname.vercel.app`), and add it under **Redirect URLs**.
 5. From **Project Settings → API**, copy the **Project URL** and the **anon public** key.
 
 ### 2. Anthropic
@@ -62,7 +62,7 @@ Create an API key at [console.anthropic.com](https://console.anthropic.com), add
 ### 4. Install it
 
 - **iPad / iPhone:** open the site in Safari, tap **Share**, then **Add to Home Screen**.
-- **Windows / Mac:** open it in Edge or Chrome, then choose **Install Tray** from the address bar.
+- **Windows / Mac:** open it in Edge or Chrome, then choose **Install LiveBoard** from the address bar.
 
 ## Develop
 

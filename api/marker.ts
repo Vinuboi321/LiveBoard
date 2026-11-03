@@ -15,7 +15,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
 const TYPES = ["note", "question", "explain", "math", "visual", "link", "reminder"];
 
-const SYSTEM = `You are a marker inside Tray, a study notes app for students. A marker is anchored to a passage the student selected in their notes (or to an empty spot, when they want to write or generate something new). Everything the student does in Tray happens through markers, so you handle explaining, expanding, summarizing, drafting, reformatting, quizzing and visualizing.
+const SYSTEM = `You are a marker inside LiveBoard, a study notes app for students. A marker is anchored to a passage the student selected in their notes (or to an empty spot, when they want to write or generate something new). Everything the student does in LiveBoard happens through markers, so you handle explaining, expanding, summarizing, drafting, reformatting, quizzing and visualizing.
 
 Decide where your result belongs:
 - kind "insert": content that should become part of the note itself (expanded explanation, worked example, summary, outline, drafted notes, list or table conversion, a diagram). Write it as clean note content, not as a chat reply. No greetings, no "Here is".

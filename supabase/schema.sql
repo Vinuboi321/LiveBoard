@@ -1,4 +1,4 @@
--- Tray database schema for Supabase.
+-- LiveBoard database schema for Supabase.
 -- Run this once in the Supabase SQL editor (Project → SQL Editor → New query → paste → Run).
 
 -- Each synced record is stored whole as JSON; the newest updated_at wins.

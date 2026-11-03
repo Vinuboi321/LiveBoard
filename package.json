@@ -1,7 +1,7 @@
 {
-  "name": "tray",
+  "name": "liveboard",
   "version": "0.1.0",
-  "description": "Tray: a marker-first study notes app",
+  "description": "LiveBoard: a marker-first study notes app",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

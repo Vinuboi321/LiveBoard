@@ -41,7 +41,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       <div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>
       <button class="btn danger" id="sWipe">Delete everything on this device</button>
     </section>
-    <p class="muted small">Tray · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
+    <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
 
   const name = $("#sName", panel) as HTMLInputElement;
   name.onchange = () => putMeta({ displayName: name.value.trim() });
@@ -83,7 +83,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     const blob = new Blob([await exportAll()], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `tray-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `liveboard-backup-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     a.remove();
