@@ -50,7 +50,7 @@ You need three free accounts: **Supabase** (accounts and sync), an **Anthropic A
 ### 1. Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Open **SQL Editor**, then **New query**. Paste all of `supabase/schema.sql` and click **Run**.
+2. Open **SQL Editor**, then **New query**. Paste all of `supabase/schema.sql` and click **Run**. It's safe to run again after an update; each upgrade is also in `supabase/migrations/`.
 3. Go to **Authentication → Providers**. Email is on by default, and LiveBoard signs people in with magic links.
 4. Go to **Authentication → URL Configuration**. Set **Site URL** to your Vercel URL once you have it (for example `https://liveboard-yourname.vercel.app`), and add it under **Redirect URLs**.
 5. From **Project Settings → API**, copy the **Project URL** and the **anon public** key.
@@ -66,7 +66,10 @@ Create an API key at [console.anthropic.com](https://console.anthropic.com), add
    - `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`
    - `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the same values, used by the server to check sign-in)
    - `ANTHROPIC_API_KEY`
-   - optionally `ANTHROPIC_MODEL` and `AI_DAILY_LIMIT` (for example `60`) for a free-tier cap
+   - optionally `ANTHROPIC_MODEL`, and the limits `AI_DAILY_LIMIT` (per student per day, default 60), `AI_PER_MINUTE_LIMIT` (default 8) and `AI_GLOBAL_DAILY_LIMIT` (whole app per day, default 5000)
+   - `AI_DISABLED=true` turns AI off at once if costs spike; writing, math and recall keep working
+
+   AI fails closed: if the sign-in check or the usage check isn't configured or can't be reached, no model call is made. See [docs/deployment.md](docs/deployment.md) for the release checklist, monitoring and rollback.
 3. Deploy, then put the URL back into Supabase's Site URL (step 1.4).
 
 ### 4. Install it
@@ -81,8 +84,16 @@ npm install
 npm run dev            # app only; AI shows "not connected"
 npx vercel dev         # app + /api/marker with your .env.local
 npm run build          # typecheck + production build
-npx vite preview --port 4173 & node tests/e2e.cjs && node tests/regressions.cjs   # end-to-end + regression tests, AI mocked
+npm test               # builds, then runs every check below (CI runs the same on each push)
 ```
+
+| Suite | What it proves |
+| --- | --- |
+| `tests/api.cjs` | `/api/marker` makes no model call without verified sign-in and a working usage check; bad input gets 400/413, slow AI 504 |
+| `tests/e2e.cjs`, `tests/regressions.cjs` | the marker flows, dial, recall and earlier bug fixes in a real browser (AI mocked) |
+| `tests/safety.cjs` | strict backup restore, markers that survive deleting their passage, exam reminders, the sandboxed calculator |
+| `tests/sync.cjs` | against a fake Supabase: offline edits survive restarts and sign-out, accounts stay separate, two devices editing one note keep both versions |
+| `tests/sql/run.sh` | `supabase/schema.sql` on real Postgres: revision checks, row isolation, AI limits, once-a-day recall points (needs local Postgres) |
 
 ## How it's built
 
@@ -92,9 +103,10 @@ npx vite preview --port 4173 & node tests/e2e.cjs && node tests/regressions.cjs 
 | Editor | TipTap (ProseMirror) with custom `marker` mark, `pin` node, `markerOutput` node and `diagram` node (`src/editor/extensions.ts`) |
 | Marker box | `src/editor/markerBox.ts`. Local intents run first (`src/ai.ts`), everything else goes to `/api/marker` |
 | AI | `api/marker.ts`, a Vercel function calling the Claude Messages API with a forced tool call, so results come back structured (`insert` vs `answer`, type, markdown, calc, mermaid, recall Q/A) |
-| Math | mathjs with 64-digit BigNumber precision, evaluated on the device |
-| Storage | IndexedDB via Dexie (`src/store.ts`), local-first |
-| Sync | Supabase (`src/sync.ts`). Each record is stored as JSON with `updated_at`, and the newest wins. Row-level security keeps every row private to its owner |
+| Math | mathjs with 64-digit BigNumber precision, in a worker that is stopped after 4 seconds (`src/mathCore.ts`) |
+| Storage | IndexedDB via Dexie (`src/store.ts`), local-first. One database per account on the device, and every change is written with an upload-queue entry in the same transaction |
+| Sync | Supabase (`src/sync.ts`). Uploads go through `push_rows`, which only applies a change made on top of the latest server revision; downloads follow a server sequence number. Row-level security keeps every row private to its owner |
+| Backup | `src/backup.ts` validates every field and node type, then `restoreBackup` writes it in one transaction |
 | Home | `src/home/home.ts`: dial, morning strip, recall |
 
 The backend contract (`/api/marker`) and the Supabase tables are plain JSON, so a native Flutter app can reuse both as they are.
@@ -104,7 +116,10 @@ The backend contract (`/api/marker`) and the Supabase tables are plain JSON, so 
 - **Handwriting:** Apple Pencil ink isn't in the web app. It's the main reason for the planned Flutter version.
 - **Scanned PDFs** need OCR, and markers on imported PDFs anchor to the extracted text, not to the original page layout.
 - **Tables** from the AI become lists, because the editor doesn't have tables yet.
-- **Sync conflicts** resolve per note (the newest save wins). Editing the same note on two devices while offline keeps only the later one.
-- **Accounts on shared devices:** notes on a device belong to one account. Signing out waits until everything has synced, then clears the device. A different account signing in starts from its own data.
+- **Sync conflicts:** when two devices change one note, the device that uploads second keeps its version in place and the other version is saved as a copy named “… (from another device)”. Its markers stay with the original, so the copy is plain text. Marker conflicts merge (every message, answer and written version is kept).
+- **Accounts on shared devices:** each account has its own database on the device. Signing out keeps a copy for next time (unsynced changes upload on the next sign-in); “Sign out and remove from this device” deletes it, and is refused while changes are still waiting. Notes made while signed out are only added to an account when the student says so. Signing out while offline forgets the sign-in on the device, but can't revoke it on the server until the next online sign-out.
+- **Markers whose passage is deleted** keep everything and show “Source removed”, with a button to put them back.
 - **Math** uses 64-digit precision. A few functions only exist for ordinary numbers, and those results are marked ≈.
+- **Leaderboard** points are decided by the server: 10 for “Got it”, 3 for “Again”, once per marker per day. It's still a friendly measure of effort, not proof of knowledge.
+- **Dependencies:** `npm audit` reports 10 low/moderate findings, all in the service-worker build tooling (workbox-build and its glob/minimatch/ejs chain via vite-plugin-pwa). They run only at build time on trusted input and aren't shipped to students. CI fails on any high or critical finding.
 - AI answers arrive all at once. Streaming would make long drafts feel faster.

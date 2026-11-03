@@ -1,11 +1,11 @@
 import "./styles.css";
 import { destroyHome, installHomeListeners, renderHome, setFocusNote, homeAlive, inRecall } from "./home/home";
-import { destroyNote, renderNote } from "./editor/noteView";
+import { destroyNote, flushNote, renderNote } from "./editor/noteView";
 import { fileToHtml } from "./importers";
 import { openSettings } from "./settings";
 import { openSearch } from "./search";
-import { ensureStarterCourse, liveCourses, liveNotes, loadAll, markersOf, newNote, note, onChange, putMarker, putMeta, putNote, state, deleteNote } from "./store";
-import { initSync } from "./sync";
+import { ensureStarterCourse, liveCourses, liveNotes, markersOf, newNote, note, onChange, openStore, putMarker, putMeta, putNote, state, deleteNote } from "./store";
+import { bootOwner, claimSignedOutNotes, initSync, migrateLegacyShared, push, signedOutNotes } from "./sync";
 import { $, debounce, toast } from "./util";
 import { newMarker } from "./store";
 
@@ -70,7 +70,7 @@ async function newBlank() {
     await ensureStarterCourse();
     const n = await newNote(currentCourseId(), r.title, "lecture", r.html);
     openNote(n.id);
-    toast("Lecture imported. Select any text to place a marker.");
+    toast(/\.pdf$/i.test(f.name) ? "Imported the PDF's text. Pictures, layout and handwriting aren't kept, and the PDF itself isn't uploaded. Select any text to place a marker." : "Lecture imported. Select any text to place a marker.", 7000);
   } catch (err) {
     toast((err as Error).message || "Couldn't read that file.", 5000);
   }
@@ -101,13 +101,17 @@ async function seedWelcome() {
 <p>Every marker remembers how well you know it. Each morning, the dial's <strong>Start recall</strong> button quizzes you on what you marked, and your answers move markers from unsure to mastered.</p>
 <p>Need bold, headings or lists by hand? Tap <strong>Aa</strong> at the top of a note to show the classic tools.</p>`;
   await putNote({ ...n, html, plain: html.replace(/<[^>]+>/g, " ") });
-  await putMeta({ seeded: true });
+  await putMeta({ seeded: true, welcomeId: n.id });
 }
 
 async function boot() {
   $("#today")!.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
-  await loadAll();
-  await seedWelcome();
+  // Whose notes these are is settled before anything is shown, so one account's notes never flash up for another.
+  await migrateLegacyShared().catch(e => console.warn("legacy move", e));
+  const owner = await bootOwner();
+  await openStore(owner);
+  // A signed-in account gets its starter note only once it's known to be empty, so each new device doesn't add another.
+  if (!owner) await seedWelcome();
   if (import.meta.env.VITE_ARTIFACT) await (await import("./demo")).seedDemo();
   installHomeListeners();
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
@@ -118,8 +122,60 @@ async function boot() {
   });
   addEventListener("hashchange", route);
   route();
+  installUpdates();
   onChange(k => { if (k !== "meta") refresh(); });
-  initSync(() => { toast("Signed in. Your notes are syncing."); refresh(); }).catch(e => console.warn(e));
+  initSync({
+    beforeSwitch: async () => { flushNote(); await new Promise(r => setTimeout(r, 50)); },
+    notice: msg => toast(msg, 6000)
+  }).then(async pulled => {
+    if (!owner) return;
+    if (pulled && !state.meta.seeded) {
+      if (!liveNotes().length) { await seedWelcome(); refresh(); }
+      else await putMeta({ seeded: true });
+    }
+    await offerClaim();
+  }).catch(e => console.warn(e));
+}
+
+/** First sign-in on a device with signed-out notes: ask before moving them into the account (the device may be shared). */
+async function offerClaim() {
+  const count = await signedOutNotes();
+  if (!count) return;
+  const bar = document.createElement("div");
+  bar.className = "claimbar";
+  bar.setAttribute("role", "dialog");
+  bar.setAttribute("aria-label", "Notes made while signed out");
+  bar.innerHTML = `<p><b>${count} note${count === 1 ? " was" : "s were"} made on this device while signed out.</b> Add ${count === 1 ? "it" : "them"} to this account?</p><div class="row"><button class="btn primary" id="clYes">Add to my account</button><button class="btn" id="clNo">Keep separate</button></div>`;
+  document.body.appendChild(bar);
+  const done = async (move: boolean) => {
+    bar.remove();
+    await claimSignedOutNotes(move);
+    if (move) { await openStore(state.owner); void push(); refresh(); route(); toast(`Added ${count} note${count === 1 ? "" : "s"} to your account.`); }
+  };
+  ($("#clYes", bar) as HTMLButtonElement).onclick = () => done(true);
+  ($("#clNo", bar) as HTMLButtonElement).onclick = () => done(false);
+}
+
+/* App updates: offer a reload once a new version is downloaded, and save first. */
+function installUpdates() {
+  import("virtual:pwa-register").then(({ registerSW }) => {
+    const update = registerSW({
+      onNeedRefresh() {
+        if (document.querySelector(".updatebar")) return;
+        const bar = document.createElement("div");
+        bar.className = "updatebar";
+        bar.innerHTML = `<span>A new version of LiveBoard is ready.</span><button class="btn primary" id="upGo">Reload</button><button class="btn" id="upLater">Later</button>`;
+        document.body.appendChild(bar);
+        ($("#upLater", bar) as HTMLButtonElement).onclick = () => bar.remove();
+        ($("#upGo", bar) as HTMLButtonElement).onclick = async () => { flushNote(); await new Promise(r => setTimeout(r, 150)); await update(true); };
+      }
+    });
+  }).catch(() => { /* no service worker here */ });
+  // A lazily loaded part of the app (PDF import, diagrams) was replaced by a newer deploy.
+  addEventListener("vite:preloadError", e => {
+    e.preventDefault();
+    toast("LiveBoard was updated. Your notes are saved; reload the page to use this feature.", 8000);
+  });
 }
 
 boot().catch(err => {

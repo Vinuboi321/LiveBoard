@@ -26,7 +26,7 @@ async function pdfToHtml(file: File) {
     const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   }
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
   const pages = Math.min(doc.numPages, 150);
   let html = "";
   for (let p = 1; p <= pages; p++) {

@@ -1,5 +1,5 @@
-import { courseColor, courseName, liveMarkers, liveNotes, note, putMarker, putMeta, state, streak, course } from "../store";
-import { leaderboard, logRecallPoints, currentUser, syncConfigured } from "../sync";
+import { courseColor, courseName, liveMarkers, liveNotes, note, putMarker, putMeta, putLocalMeta, state, streak, course } from "../store";
+import { leaderboard, logRecall, currentUser, syncConfigured } from "../sync";
 import type { Marker, Note } from "../types";
 import { $, agoLong, DAY, dayKey, esc, H, reducedMotion, wrapDeg } from "../util";
 import { setPendingOpen, TYPE_INFO } from "../editor/markerBox";
@@ -50,6 +50,7 @@ function curCourseId() {
 function inScope(m: Marker) {
   const age = Date.now() - m.createdAt;
   if (m.type === "reminder" && m.remindAt && m.remindAt <= Date.now()) return true;
+  if (state.meta.scope === "due") return true;
   if (state.meta.scope === "night") return age < 36 * H;
   if (state.meta.scope === "week") return age < 7 * DAY;
   return note(m.noteId)?.courseId === curCourseId();
@@ -65,17 +66,19 @@ async function renderMorning() {
   const greet = (hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening") + (state.meta.displayName ? `, ${state.meta.displayName.split(" ")[0]}` : "");
   const q = queue(), st = streak();
   const cid = curCourseId();
-  const scopeName = { night: "last night", week: "this week", unit: courseName(cid) }[state.meta.scope];
+  const scopeName = { due: "", night: "last night", week: "this week", unit: courseName(cid) }[state.meta.scope];
+  const overdue = q.filter(m => m.due < Date.now() - DAY).length;
+  const from = scopeName ? ` from ${esc(scopeName)}` : "";
   const wk = [...Array(7)].map((_, i) => { const back = 6 - i, k = dayKey(Date.now() - back * DAY); return `<i class="${state.meta.studyDays.includes(k) ? "on" : ""} ${back === 0 ? "today" : ""}"></i>`; }).join("");
   const c = course(cid);
-  el.innerHTML = `<div class="greet"><b>${esc(greet)}</b><span>${q.length ? `${q.length} marker${q.length > 1 ? "s" : ""} from ${esc(scopeName)} to recall` : doneToday() ? "Today's recall is done" : `Nothing due from ${esc(scopeName)}`}</span></div>
+  el.innerHTML = `<div class="greet"><b>${esc(greet)}</b><span>${q.length ? `${q.length} marker${q.length > 1 ? "s" : ""}${from} to recall${overdue ? ` · ${overdue} overdue` : ""}` : doneToday() ? "Today's recall is done" : `Nothing due${from}`}</span></div>
     <div class="chip streakchip" title="Study streak: days you finished a recall"><b>${st}</b><small>day streak</small><span class="wk" aria-hidden="true">${wk}</span></div>
-    <div class="scope" role="group" aria-label="Recall from">${(["night", "week", "unit"] as const).map(s => `<button data-s="${s}" aria-pressed="${s === state.meta.scope}">${{ night: "Last night", week: "Week", unit: "Course" }[s]}</button>`).join("")}</div>
+    <div class="scope" role="group" aria-label="Recall from">${(["due", "night", "week", "unit"] as const).map(s => `<button data-s="${s}" aria-pressed="${s === state.meta.scope}">${{ due: "All due", night: "Last night", week: "Week", unit: "Course" }[s]}</button>`).join("")}</div>
     <button class="recallbtn" id="recallBtn" ${q.length ? "" : "disabled"}>${q.length ? `Start recall <span class="cnt">${q.length}</span>` : "All caught up"}</button>
     <div class="lbwrap" id="lbWrap">${c?.classId && currentUser()
       ? `<button class="chip lbchip" id="lbBtn" aria-expanded="${lbOpen}" aria-controls="lbPop"><b id="lbRank">#–</b><small>in ${esc(c.name)}</small></button><div class="lbpop" id="lbPop" ${lbOpen ? "" : "hidden"}><h3>${esc(c.name)} · this week</h3><div id="lbRows">Loading…</div></div>`
       : `<button class="chip lbchip" id="lbJoin"><small>${syncConfigured() ? "Join a class" : "Classes"}</small></button>`}</div>`;
-  el.querySelectorAll<HTMLButtonElement>(".scope button").forEach(b => b.onclick = async () => { await putMeta({ scope: b.dataset.s as "night" }); renderMorning(); });
+  el.querySelectorAll<HTMLButtonElement>(".scope button").forEach(b => b.onclick = async () => { await putLocalMeta({ scope: b.dataset.s as "due" }); renderMorning(); });
   $("#recallBtn")!.onclick = startRecall;
   const join = $("#lbJoin");
   if (join) join.onclick = () => handlers?.openSettings("classes");
@@ -414,9 +417,9 @@ async function grade(m0: Marker, good: boolean) {
   const ivl = good ? Math.max(1, (m.ivl || 1) * 2.5) : 1;
   const mastery = (good ? Math.min(2, m.mastery + 1) : Math.max(0, m.mastery - 1)) as Marker["mastery"];
   await putMarker({ ...m, ivl, mastery, due: Date.now() + (good ? ivl * DAY : 10 * 60 * 1000), type: m.type === "reminder" ? "question" : m.type, remindAt: m.type === "reminder" ? null : m.remindAt });
-  const pts = good ? 10 : 4;
+  const pts = good ? 10 : 3;
   await putMeta({ points: state.meta.points + pts });
-  logRecallPoints(course(note(m.noteId)?.courseId)?.classId, pts);
+  logRecall(course(note(m.noteId)?.courseId)?.classId, m.id, good);
   if (good) R.got++;
   R.i++;
   R.revealed = false;

@@ -8,38 +8,43 @@ export type LocalAction =
   | { do: "calc"; expr: string }
   | { do: "link"; query: string }
   | { do: "related" }
-  | { do: "remind"; at: number; label: string };
+  | { do: "remind"; at: number; label: string }
+  | { do: "ask-exam" }; // "before the exam" with no exam date known for the course
 
 const WORDY = /\b(explain|why|what|how|make|turn|give|quiz|draw|summar|outline|draft|list|write|expand|example|compare|define|describe|show)\b/i;
 
-/* Math runs on the device with 64 significant digits (BigNumber), so large integers and long decimals stay correct.
-   A few functions only exist for ordinary floating-point numbers; those fall back to 15-16 digits and say so. */
-type MathJs = import("mathjs").MathJsInstance;
-let big: MathJs | null = null, float: MathJs | null = null;
-async function engines() {
-  if (!big || !float) {
-    const m = await import("mathjs");
-    big = m.create(m.all, { number: "BigNumber", precision: 64 });
-    float = m.create(m.all, {});
+/* Math runs in a worker that is stopped after a few seconds, so an expression like 99999! can't freeze the app.
+   The single-file preview can't load workers, so there it runs on the page (inputs are still length- and size-limited). */
+const MATH_TIMEOUT_MS = 4000;
+let worker: Worker | null = null, seq = 0;
+const waiting = new Map<number, { ok: (v: string) => void; no: (e: Error) => void }>();
+function mathWorker() {
+  if (!worker) {
+    worker = new Worker(new URL("./mathWorker.ts", import.meta.url), { type: "module" });
+    worker.onmessage = (e: MessageEvent<{ id: number; ok: boolean; value?: string; error?: string }>) => {
+      const w = waiting.get(e.data.id);
+      if (!w) return;
+      waiting.delete(e.data.id);
+      if (e.data.ok) w.ok(e.data.value!); else w.no(new Error(e.data.error));
+    };
+    worker.onerror = () => { killWorker(new Error("The calculator stopped. Try again.")); };
   }
-  return { big: big!, float: float! };
+  return worker;
 }
-export async function mathjs() { return (await engines()).big; }
-const normalize = (expr: string) => expr.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/π/g, "pi").replace(/√\s*\(/g, "sqrt(");
+function killWorker(err: Error) {
+  worker?.terminate();
+  worker = null;
+  waiting.forEach(w => w.no(err));
+  waiting.clear();
+}
 export async function evaluate(expr: string): Promise<string> {
-  const { big, float } = await engines();
-  const e = normalize(expr);
-  const fmt = { precision: 20, lowerExp: -9, upperExp: 30 };
-  try {
-    const v = big.evaluate(e);
-    if (typeof v === "function" || v === undefined) throw new Error("That isn't something to calculate.");
-    return big.format(v, fmt);
-  } catch (err) {
-    if (/isn't something/.test((err as Error).message) || /Undefined symbol|Unexpected|Parenthesis|SyntaxError/.test(String(err))) throw err;
-    const v = float.evaluate(e);
-    if (typeof v === "function" || v === undefined) throw new Error("That isn't something to calculate.");
-    return float.format(v, { precision: 14 }) + " (≈, 15-digit precision)";
-  }
+  if (import.meta.env.VITE_ARTIFACT || typeof Worker === "undefined") return (await import("./mathCore")).calc(expr);
+  const id = ++seq;
+  return new Promise<string>((ok, no) => {
+    const timer = setTimeout(() => killWorker(new Error("That calculation took too long, so it was stopped.")), MATH_TIMEOUT_MS);
+    waiting.set(id, { ok: v => { clearTimeout(timer); ok(v); }, no: e => { clearTimeout(timer); no(e); } });
+    mathWorker().postMessage({ id, expr });
+  });
 }
 
 function nextWeekday(name: string) {
@@ -53,7 +58,7 @@ function nextWeekday(name: string) {
   return d.getTime();
 }
 
-export async function localIntent(raw: string): Promise<LocalAction | null> {
+export async function localIntent(raw: string, examDate?: string | null): Promise<LocalAction | null> {
   const s = raw.trim();
   const low = s.toLowerCase();
   if (!s) return null;
@@ -79,7 +84,13 @@ export async function localIntent(raw: string): Promise<LocalAction | null> {
     if (/tomorrow/.test(low)) { const d = new Date(Date.now() + DAY); d.setHours(8, 0, 0, 0); at = d.getTime(); label = "tomorrow morning"; }
     else if (inN) { const n = +inN[1] * (inN[2].startsWith("week") ? 7 : 1); at = Date.now() + n * DAY; label = `in ${n} day${n > 1 ? "s" : ""}`; }
     else if (wd) { at = nextWeekday(wd[1]); label = `on ${new Date(at).toLocaleDateString(undefined, { weekday: "long" })}`; }
-    else if (/\b(exam|test|midterm|final|quiz)\b/.test(low)) { at = Date.now() + 3 * DAY; label = "in 3 days, before your exam"; }
+    else if (/\b(exam|test|midterm|final|quiz)\b/.test(low)) {
+      const exam = examDate && /^\d{4}-\d\d-\d\d$/.test(examDate) ? new Date(`${examDate}T08:00:00`).getTime() : NaN;
+      if (!(exam > Date.now())) return { do: "ask-exam" };
+      const d = new Date(Math.max(Date.now() + 36e5, exam - 2 * DAY)); d.setHours(8, 0, 0, 0);
+      at = Math.min(Math.max(d.getTime(), Date.now() + 36e5), exam);
+      label = `${new Date(at).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}, before your exam on ${new Date(exam).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    }
     return { do: "remind", at, label };
   }
 
@@ -121,10 +132,12 @@ export async function askMarker(body: MarkerRequest): Promise<AIResult> {
   try {
     r = await fetch("/api/marker", {
       method: "POST",
+      signal: AbortSignal.timeout(40_000),
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ ...body, thread: body.thread.map(m => ({ role: m.role, text: m.text })) })
     });
-  } catch {
+  } catch (e) {
+    if ((e as Error)?.name === "TimeoutError") throw new Error("The AI took too long. Your question is saved in the marker; try again.");
     throw new Error(navigator.onLine ? "Couldn't reach the AI. Try again." : "You're offline. AI markers need a connection; math, formatting, links and reminders still work.");
   }
   const j = await r.json().catch(() => ({}));

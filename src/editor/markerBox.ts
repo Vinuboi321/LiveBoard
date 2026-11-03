@@ -1,10 +1,10 @@
 import { aiHealth, askMarker, evaluate, localIntent, type LocalAction } from "../ai";
 import { mdToHtml } from "../md";
-import { courseName, liveMarkers, liveNotes, newMarker, newNote, note, putMarker, putNote, state } from "../store";
+import { course, courseName, liveMarkers, liveNotes, newMarker, newNote, note, putCourse, putMarker, putNote, state } from "../store";
 import type { Marker, MarkerType, Mastery, ThreadMsg } from "../types";
 import { $, agoLong, armButton, DAY, debounce, esc, toast } from "../util";
 import { repaintAll } from "./extensions";
-import { applyFormat, contextAround, insertOutput, removeMarkerFromDoc, restoreOutput, scrollToOutput } from "./ops";
+import { applyFormat, contextAround, insertOutput, removeMarkerFromDoc, reattachAtEnd, restoreOutput, scrollToOutput } from "./ops";
 
 /* The marker workspace: everything a marker can do, in one large panel anchored to its passage.
    Write · Ask · Expand · Calculate · Related · Recall. Ask also takes plain-word commands. */
@@ -38,10 +38,12 @@ function takeReopenTab() { const t = reopenTab; reopenTab = null; return t; }
 export const setPendingOpen = (id: string) => { pendingOpen = id; };
 aiHealth().then(h => { aiOn = h.ai; if (ws) render(); });
 
+let opener: HTMLElement | null = null; // focus returns here when the card closes
 export function closeBox() {
   saveDraft.flush();
   if (ws) {
     const el = ws;
+    if (el.contains(document.activeElement) && opener?.isConnected) opener.focus({ preventScroll: true });
     el.classList.add("closing");
     setTimeout(() => el.remove(), 160);
   }
@@ -55,6 +57,7 @@ export function openBox(id: string, anchorEl?: Element | null, startTab?: Tab) {
   if (!m) return;
   if (ws && current?.id === id) { if (startTab) { tab = startTab; render(); } return; }
   closeBox();
+  opener = (anchorEl as HTMLElement | null) || (document.activeElement as HTMLElement | null) || pinEl(id);
   current = m;
   lastCalc = "";
   moved = false;
@@ -80,7 +83,8 @@ let moved = false; // the student dragged the card; keep it where they put it
     or above it. Same behavior at every screen size; never a sheet glued to an edge. */
 function placeCard(anchor: Element | null) {
   if (!ws) return;
-  const vw = innerWidth, vh = innerHeight, top0 = 64, gap = 14, edge = 12;
+  const vw = innerWidth, vh = Math.round(visualViewport?.height || innerHeight), top0 = 64, gap = 14, edge = 12;
+  const minH = Math.min(260, vh - top0 - edge); // never taller than the visible screen (on-screen keyboards shrink it)
   const W = Math.min(440, vw - edge * 2);
   let H = Math.min(560, vh - top0 - edge * 2);
   let left: number, top: number;
@@ -104,10 +108,11 @@ function placeCard(anchor: Element | null) {
       if (below >= Math.min(H, 360) || below >= above) { top = a.bottom + gap; H = Math.min(H, below); }
       else { H = Math.min(H, above); top = a.top - gap - H; }
     }
+    H = Math.max(minH, H);
     left = Math.min(Math.max(left, edge), vw - W - edge);
     top = Math.min(Math.max(top, top0), vh - H - edge);
   }
-  H = Math.max(260, H);
+  H = Math.max(minH, Math.min(H, vh - top - edge));
   Object.assign(ws.style, { left: `${Math.round(left)}px`, top: `${Math.round(top)}px`, width: `${Math.round(W)}px`, height: `${Math.round(H)}px` });
   if (a) ws.style.transformOrigin = `${Math.round(a.left + a.width / 2 - left)}px ${Math.round(a.top + a.height / 2 - top)}px`;
 }
@@ -117,7 +122,9 @@ function clampCard() {
   ws.style.left = `${Math.min(Math.max(r.left, 8), innerWidth - r.width - 8)}px`;
   ws.style.top = `${Math.min(Math.max(r.top, 56), innerHeight - 80)}px`;
 }
-addEventListener("resize", () => { if (!ws || !current) return; if (moved) clampCard(); else placeCard(pinEl(current.id)); });
+const onViewport = () => { if (!ws || !current) return; if (moved) clampCard(); else placeCard(pinEl(current.id)); };
+addEventListener("resize", onViewport);
+visualViewport?.addEventListener("resize", onViewport);
 
 /** Drag the card by its grab bar or header, with mouse, pen or touch. */
 function bindDrag() {
@@ -187,6 +194,7 @@ function render() {
       <button class="mx" id="mClose" aria-label="Close marker">×</button>
     </div>
     <div class="wsanchor">
+      ${m.detachedAt ? `<div class="detached" role="status"><b>Source removed.</b> The ${m.text ? "passage" : "point"} this marker sat on was deleted from the note. Everything in the marker is kept.<div class="wsrow"><button class="btn2" id="mReattach">Put back at the end of the note</button><button class="textlink danger" id="mForget">Delete marker</button></div></div>` : ""}
       ${m.text ? `<blockquote>${esc(m.text)}</blockquote>` : `<blockquote class="blank">${isFree(m.id) ? "A free point on your page." : "A blank point in your note."} Write, draft or generate here.</blockquote>`}
       <div class="wsmeta"><span>Anchored in ${esc(n?.title || "this note")}</span><span>${esc(courseName(n?.courseId))}</span><span>Placed ${agoLong(m.createdAt)}</span></div>
       <div class="wschips"><span class="chipm" data-mastery="${m.mastery}"><i></i>${MASTERY[m.mastery]}</span>${m.recallOff ? `<span class="chipm off">Not in recall</span>` : `<span class="chipm">Review ${m.due <= Date.now() ? "due now" : new Date(m.due).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>`}${linkCount ? `<span class="chipm">${linkCount} link${linkCount > 1 ? "s" : ""}</span>` : ""}</div>
@@ -220,7 +228,28 @@ function bindCommon() {
   more.onclick = () => { menu.hidden = !menu.hidden; more.setAttribute("aria-expanded", String(!menu.hidden)); };
   menu.querySelectorAll<HTMLButtonElement>("[data-t]").forEach(b => b.onclick = () => update({ type: b.dataset.t as MarkerType }));
   const id = current.id;
-  armButton($("#mDel", ws)!, "Remove marker", "Tap again to remove", () => { closeBox(); removeMarkerFromDoc(id); toast("Marker removed. Undo with Ctrl/⌘ Z."); });
+  armButton($("#mDel", ws)!, "Remove marker", "Tap again to remove", async () => {
+    closeBox();
+    removeMarkerFromDoc(id);
+    const m = state.markers.get(id);
+    if (m && !m.deleted) await putMarker({ ...m, deleted: true }); // removed on purpose, not lost
+    toast("Marker removed. Undo with Ctrl/⌘ Z.");
+  });
+  $("#mReattach", ws)?.addEventListener("click", async () => {
+    const m = state.markers.get(id);
+    if (!m) return;
+    if (!reattachAtEnd(id, m.text)) return toast("Open the marker's note to put it back.");
+    await updateMarker(id, { detachedAt: null });
+    setTimeout(() => { const el = pinEl(id); el?.scrollIntoView({ block: "center" }); if (!moved) placeCard(el); }, 60);
+    toast("Marker put back at the end of the note.");
+  });
+  const forget = $("#mForget", ws);
+  if (forget) armButton(forget, "Delete marker", "Tap again to delete it and everything in it", async () => {
+    const m = state.markers.get(id);
+    closeBox();
+    if (m) await putMarker({ ...m, deleted: true });
+    toast("Marker deleted.");
+  });
   ws.querySelectorAll<HTMLButtonElement>("[data-add]").forEach(b => b.onclick = () => addToNote(Number(b.dataset.add)));
 }
 
@@ -494,7 +523,7 @@ function bindTab() {
       if (!q) return;
       const self = $("#aSelf", ws!) as HTMLTextAreaElement | null;
       if (aiOn === false) {
-        const local = await localIntent(q).catch(() => null);
+        const local = await localIntent(q, course(note(m.noteId)?.courseId)?.examDate).catch(() => null);
         if (local && (await runLocal(local, q))) return;
         const ans = self?.value.trim() || "";
         await update({
@@ -611,10 +640,12 @@ async function expand(kind: string) {
   run(prompts[kind]);
 }
 
-async function runLocal(a: LocalAction, said: string): Promise<boolean> {
-  if (!current) return false;
-  const m = current;
+async function runLocal(a: LocalAction, said: string, id = current?.id): Promise<boolean> {
+  const m = id ? state.markers.get(id) : null;
+  if (!m) return false;
+  const update = (patch: Partial<Marker>) => updateMarker(m.id, patch);
   const user = msg("user", said);
+  if (a.do === "ask-exam") { askExamDate(m.id, said); return true; }
   if (a.do === "format") {
     const multi = /[.;!?]\s+\S/.test(m.text) || m.text.includes(",");
     if (["list", "numbered", "checklist"].includes(a.fmt) && multi && aiOn) return false;
@@ -643,21 +674,43 @@ async function runLocal(a: LocalAction, said: string): Promise<boolean> {
   return true;
 }
 
+/** "Remind me before the exam" with no exam date yet: ask for it once, store it on the course, then set the reminder. */
+function askExamDate(id: string, said: string) {
+  const body = ws && current?.id === id ? $("#wsBody", ws) : null;
+  const m = state.markers.get(id), c = course(note(m?.noteId)?.courseId);
+  if (!body || !m) { toast("Add the exam date for this course in Settings, then try again."); return; }
+  body.insertAdjacentHTML("afterbegin", `<form class="examask" id="examAsk"><label>When is the ${esc(c?.name || "")} exam?<input type="date" id="examIn" required min="${new Date().toISOString().slice(0, 10)}"></label><button class="btn1">Set reminder</button></form>`);
+  const f = $("#examAsk", body) as HTMLFormElement;
+  ($("#examIn", f) as HTMLInputElement).focus();
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const v = ($("#examIn", f) as HTMLInputElement).value;
+    if (!/^\d{4}-\d\d-\d\d$/.test(v)) return;
+    if (c) await putCourse({ ...c, examDate: v });
+    const next = await localIntent(said, v);
+    if (next && next.do === "remind") await runLocal(next, said, id);
+  };
+}
+
 async function run(said: string) {
   if (!current || busy) return;
+  const id = current.id; // the marker this was typed into, even if another is opened while we wait
   try {
-    const local = await localIntent(said);
-    if (local && (await runLocal(local, said))) return;
+    const n0 = note(current.noteId);
+    const local = await localIntent(said, course(n0?.courseId)?.examDate);
+    if (local && (await runLocal(local, said, id))) return;
   } catch (e) { toast((e as Error).message); return; }
+  const start = state.markers.get(id);
+  if (!start) return;
   if (aiOn === false) {
-    await update({ thread: [...current.thread, msg("user", said)] });
+    await updateMarker(id, { thread: [...start.thread, msg("user", said)] });
     toast("Saved as a question. Connect the AI to get answers.");
     return;
   }
-  const id = current.id, n = note(current.noteId), ctx = contextAround(id);
-  const withUser: Marker = { ...current, thread: [...current.thread, msg("user", said)] };
+  const n = note(start.noteId), ctx = contextAround(id);
+  const withUser: Marker = { ...start, thread: [...start.thread, msg("user", said)] };
   await putMarker(withUser);
-  current = withUser;
+  if (current?.id === id) current = withUser;
   busy = true;
   render();
   let reply: ThreadMsg;

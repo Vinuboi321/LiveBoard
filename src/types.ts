@@ -7,7 +7,9 @@ export interface Course {
   color: string;
   classId?: string | null;
   classCode?: string | null;
+  examDate?: string | null; // YYYY-MM-DD, used by "remind me before the exam"
   updatedAt: number;
+  rev?: number; // server revision this copy is based on
   deleted?: boolean;
 }
 
@@ -22,6 +24,8 @@ export interface Note {
   createdAt: number;
   updatedAt: number;
   openedAt: number;
+  rev?: number; // server revision this copy is based on
+  conflictOf?: string | null; // set on a copy made when two devices edited this note at once
   deleted?: boolean;
 }
 
@@ -49,11 +53,13 @@ export interface Marker {
   links?: string[]; // other markers this one is connected to (two-way)
   draft?: string; // unfinished writing in the Write tab
   recallOff?: boolean; // left out of daily recall
-  passageEditedAt?: number | null;
-  outputs?: Record<string, { at: number; text: string; html: string }[]>; // revision history of what this marker wrote into the note, by output id // the marked words changed after the recall question was written
+  passageEditedAt?: number | null; // the marked words changed after the recall question was written
+  outputs?: Record<string, { at: number; text: string; html: string }[]>; // revision history of what this marker wrote into the note, by output id
   remindAt?: number | null;
+  detachedAt?: number | null; // its passage or point was removed from the note; the marker's thinking is kept
   createdAt: number;
   updatedAt: number;
+  rev?: number; // server revision this copy is based on
   deleted?: boolean;
 }
 
@@ -61,7 +67,7 @@ export interface Meta {
   key: "meta";
   studyDays: string[];
   points: number;
-  scope: "night" | "week" | "unit";
+  scope: "due" | "night" | "week" | "unit"; // recall filter; "due" = everything due
   showTools: boolean;
   lastPull: number;
   displayName: string;
@@ -69,7 +75,10 @@ export interface Meta {
   seeded: boolean;
   demoSeeded?: boolean;
   demoVersion?: number;
-  ownerId?: string | null; // the account this device's notes belong to
+  ownerId?: string | null; // legacy (single shared database); kept so old copies can be moved to their account
+  welcomeId?: string | null; // the starter note, not offered when moving signed-out notes into an account
+  cursors?: Partial<Record<"notes" | "markers" | "courses", number>>; // last server sequence pulled
+  claimDeclined?: string[]; // accounts that chose to keep this device's signed-out notes separate
 }
 
 export interface AIResult {

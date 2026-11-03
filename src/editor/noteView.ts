@@ -1,25 +1,28 @@
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import Underline from "@tiptap/extension-underline";
+import { Placeholder } from "@tiptap/extensions";
 import Highlight from "@tiptap/extension-highlight";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
+import { TaskList, TaskItem } from "@tiptap/extension-list";
 import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
 import { closeBox, openBox, setOpenNote, setPendingOpen, takePendingOpen, TYPE_INFO } from "./markerBox";
 import { dropFreeMarker, giveOutputIds, markRange, moveFreeMarker, outputsInDoc, pinIds, setEditor } from "./ops";
-import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
+import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, onRemote, patchNote, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
 import type { Note } from "../types";
-import { $, armButton, debounce, esc, toast } from "../util";
+import { $, armButton, debounce, esc, toast, uid } from "../util";
+import { stripMarkers } from "../sync";
 
 let ed: Editor | null = null;
 let unsub: (() => void) | null = null;
 let cleanup: (() => void)[] = [];
+let flushSave: (() => void) | null = null;
+/** Write any edit still waiting in the editor (used before switching accounts and when the page is hidden). */
+export function flushNote() { flushSave?.(); }
 
 export function destroyNote() {
   closeBox();
   cleanup.forEach(f => f());
   cleanup = [];
+  flushSave = null;
   unsub?.();
   unsub = null;
   if (ed) { ed.destroy(); ed = null; setEditor(null); }
@@ -49,6 +52,9 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   setOpenNote(openNote);
   let n: Note = { ...n0, openedAt: Date.now() };
   putNote(n, false);
+  /** The server revision the editor's content is built on. If sync replaces the note underneath, a save keeps both versions. */
+  let baseRev = n0.rev ?? 0;
+  let dirty = false;
 
   const courses = liveCourses();
   const backlinks = liveMarkers().filter(m => m.type === "link" && m.linkNoteId === id && m.noteId !== id);
@@ -85,13 +91,47 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   plusBtn.textContent = "+";
   document.body.append(placeBtn, plusBtn);
 
-  const save = debounce(() => {
+  const save0 = debounce(() => {
     if (!ed) return;
-    n = { ...n, doc: ed.getJSON(), html: null, plain: ed.getText({ blockSeparator: "\n" }).slice(0, 200000) };
-    putNote(n);
+    dirty = false;
+    const cur = state.notes.get(id);
+    if (cur && (cur.rev ?? 0) > baseRev && JSON.stringify(cur.doc) !== JSON.stringify(n.doc)) {
+      // Another device's version arrived while this one was being edited. Keep it as a copy, then save what's on screen.
+      const t = Date.now();
+      putNote({ ...cur, id: uid(), title: `${cur.title} (from another device)`.slice(0, 140), doc: stripMarkers(cur.doc), conflictOf: id, rev: undefined, createdAt: t, openedAt: t, updatedAt: t });
+      toast("This note also changed on another device. That version was saved as a copy.", 6000);
+    }
+    baseRev = cur?.rev ?? baseRev;
+    patchNote(id, { doc: ed.getJSON(), html: null, plain: ed.getText({ blockSeparator: "\n" }).slice(0, 200000) });
+    n = state.notes.get(id) || n;
     syncPassages();
     recordRevisions();
   }, 600);
+  const save = Object.assign(() => { dirty = true; save0(); }, { flush: () => { if (dirty || !n.doc) save0.flush(); } });
+  flushSave = () => save.flush();
+  /* Another device's version replaced this note: show it, unless there are unsaved edits (then the save keeps both). */
+  cleanup.push(onRemote((kind, ids) => {
+    if (kind !== "notes" || !ids.includes(id) || !ed) return;
+    const r = state.notes.get(id);
+    if (!r) return;
+    if (r.deleted) { toast("This note was deleted on another device."); goHome(); return; }
+    if (dirty) return;
+    baseRev = r.rev ?? baseRev;
+    n = r;
+    if (JSON.stringify(r.doc) !== JSON.stringify(ed.getJSON()) && r.doc) {
+      const { from } = ed.state.selection;
+      ed.commands.setContent(r.doc as object, { emitUpdate: false });
+      try { ed.commands.setTextSelection(Math.min(from, ed.state.doc.content.size)); } catch { /* selection outside the new doc */ }
+      repaintAll(); layoutRail();
+    }
+    const t = $("#ptitle", stage) as HTMLInputElement | null;
+    if (t && document.activeElement !== t) t.value = r.title;
+  }));
+  const onHide = () => { if (document.visibilityState === "hidden") save.flush(); };
+  const onPageHide = () => save.flush();
+  document.addEventListener("visibilitychange", onHide);
+  addEventListener("pagehide", onPageHide);
+  cleanup.push(() => { document.removeEventListener("visibilitychange", onHide); removeEventListener("pagehide", onPageHide); });
   /** Keep a short history of every block a marker wrote, so edits can be traced and undone later. */
   function recordRevisions() {
     if (!ed) return;
@@ -129,8 +169,8 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   ed = new Editor({
     element: $("#editor", stage)!,
     extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Underline, Highlight, TaskList, TaskItem.configure({ nested: true }),
+      StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: false, trailingNode: false }),
+      Highlight, TaskList, TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: ({ node }) => (node.type.name === "heading" ? "Heading" : "Start writing, or tap + to place a marker here") }),
       MarkerMark, Pin, MarkerOutput, Diagram
     ],
@@ -153,8 +193,8 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   const sel = $("#courseSel", stage) as HTMLSelectElement, nc = $("#newCourse", stage) as HTMLInputElement;
   sel.onchange = () => {
     if (sel.value === "__new") { nc.hidden = false; nc.focus(); return; }
-    n = { ...n, courseId: sel.value };
-    putNote(n);
+    patchNote(id, { courseId: sel.value });
+    n = state.notes.get(id) || n;
     $("#cdot", stage)!.style.background = courseColor(n.courseId);
   };
   nc.onkeydown = async e => {
@@ -164,8 +204,8 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     const v = nc.value.trim();
     if (!v) return;
     const c = liveCourses().find(x => x.name.toLowerCase() === v.toLowerCase()) || (await newCourse(v));
-    n = { ...n, courseId: c.id };
-    await putNote(n);
+    await patchNote(id, { courseId: c.id });
+    n = state.notes.get(id) || n;
     sel.insertAdjacentHTML("afterbegin", `<option value="${c.id}">${esc(c.name)}</option>`);
     sel.value = c.id;
     nc.hidden = true;
@@ -174,7 +214,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   };
   nc.onblur = () => { if (!nc.value.trim()) { nc.hidden = true; sel.value = n.courseId; } };
   const title = $("#ptitle", stage) as HTMLInputElement;
-  title.oninput = () => { n = { ...n, title: title.value.trim() || "Untitled note" }; putNote(n); };
+  title.oninput = () => { patchNote(id, { title: title.value.trim() || "Untitled note" }); n = state.notes.get(id) || n; };
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ed?.commands.focus("start"); } };
   armButton($("#delNote", stage)!, "Delete", "Tap again to delete", async () => { save.flush(); await deleteNote(id); toast("Note deleted."); goHome(); });
   stage.querySelectorAll<HTMLButtonElement>(".backlinks [data-open]").forEach(b => b.onclick = () => openNote(b.dataset.open!));
@@ -374,7 +414,13 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     const ms = markersOf(id);
     const mastered = ms.filter(m => m.mastery === 2).length;
     const mc = $("#mcount");
-    if (mc) mc.textContent = ms.length ? `${ms.length} marker${ms.length > 1 ? "s" : ""} · ${mastered} mastered` : "";
+    const lost = ms.filter(m => m.detachedAt);
+    if (mc) {
+      mc.innerHTML = (ms.length ? `${ms.length} marker${ms.length > 1 ? "s" : ""} · ${mastered} mastered` : "")
+        + (lost.length ? ` <button class="lostbtn" id="lostBtn" title="Markers whose passage was deleted. Their thinking is kept.">${lost.length} lost ${lost.length > 1 ? "their" : "its"} place</button>` : "");
+      const lb = $("#lostBtn");
+      if (lb) lb.onclick = () => openBox(lost[0].id, null);
+    }
   }
   /* ----- strings: a thin thread between connected markers ----- */
   function layoutStrings() {

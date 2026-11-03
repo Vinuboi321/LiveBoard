@@ -5,9 +5,15 @@ const artifact = !!process.env.ARTIFACT; // single-file build for a claude.ai ar
 
 export default defineConfig({
   define: { "import.meta.env.VITE_ARTIFACT": JSON.stringify(artifact ? "1" : "") },
-  plugins: artifact ? [] : [
+  worker: { format: "es" },
+  plugins: artifact ? [
+    // the preview has no service worker; give the update hook an empty stand-in
+    { name: "no-pwa", resolveId: (id: string) => (id === "virtual:pwa-register" ? "\0no-pwa" : null), load: (id: string) => (id === "\0no-pwa" ? "export const registerSW = () => () => Promise.resolve();" : null) }
+  ] : [
     VitePWA({
-      registerType: "autoUpdate",
+      // Ask before updating, so a new version never reloads the page in the middle of typing.
+      registerType: "prompt",
+      injectRegister: null,
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
       manifest: {
         name: "LiveBoard",

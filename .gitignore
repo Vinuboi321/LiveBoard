@@ -6,3 +6,4 @@ dist
 *.log
 tests/shots
 dist-artifact
+dist-synctest

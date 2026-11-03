@@ -93,6 +93,16 @@ export function removeMarkerFromDoc(id: string) {
   }).run();
 }
 
+/** Put a marker whose passage was deleted back into the note: its words (if any) at the end, marked again, with its dot. */
+export function reattachAtEnd(id: string, text: string) {
+  if (!ed) return false;
+  const content = text
+    ? [{ type: "text", text, marks: [{ type: "marker", attrs: { id } }] }, { type: "pin", attrs: { id } }]
+    : [{ type: "pin", attrs: { id } }];
+  ed.chain().insertContentAt(ed.state.doc.content.size, { type: "paragraph", content }).run();
+  return findPin(id) !== null;
+}
+
 /** Where a free marker dropped at a screen point should live: the nearest text position, plus an offset to the point. */
 function anchorFor(x: number, y: number) {
   if (!ed) return null;

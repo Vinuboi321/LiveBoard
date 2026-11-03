@@ -1,6 +1,7 @@
 import { aiHealth } from "./ai";
-import { course, exportAll, importAll, liveCourses, putCourse, putMeta, state, wipeLocal } from "./store";
+import { course, exportAll, liveCourses, pendingCount, putCourse, putMeta, restoreBackup, state, wipeLocal } from "./store";
 import { createClass, currentUser, joinClass, signIn, signOut, syncConfigured } from "./sync";
+import { MAX_BACKUP_BYTES, validateBackup } from "./backup";
 import { $, armButton, esc, toast } from "./util";
 
 /* Settings: account, AI status, courses and classes, backup. */
@@ -23,7 +24,9 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   $("#sBody", panel)!.innerHTML = `
     <section><h3>Account</h3>
       ${!syncConfigured() ? `<p class="muted">Sync isn't set up on this server, so notes are saved on this device only. Export a backup below to move them.</p>`
-        : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.</p><button class="btn" id="sOut">Sign out</button>`
+        : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.${pendingCount() ? ` <span class="muted">${pendingCount()} change${pendingCount() === 1 ? "" : "s"} waiting to upload.</span>` : ""}</p>
+          <div class="row"><button class="btn" id="sOut">Sign out</button><button class="btn" id="sOutRemove" title="Also delete this account's notes from this device once they're uploaded">Sign out and remove from this device</button></div>
+          <p class="muted small">Signing out keeps a copy on this device for next time, unless you remove it. Someone else signing in here never sees it.</p>`
         : `<p class="muted">Sign in to sync notes across devices, use AI markers and join a class.</p><form class="row" id="sIn"><input type="email" id="sEmail" required placeholder="you@school.edu" autocomplete="email"><button class="btn primary">Email me a link</button></form>`}
       <label class="field">Your name (shown on class leaderboards)<input id="sName" maxlength="40" value="${esc(state.meta.displayName)}" placeholder="First name"></label>
     </section>
@@ -33,6 +36,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     <section id="classes"><h3>Courses and classes</h3>
       <p class="muted">Share a course as a class to get a class leaderboard. Anyone with the code can join.</p>
       <div class="clist">${courses.map(c => `<div class="crow" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><input class="cname" value="${esc(c.name)}" maxlength="32" aria-label="Course name">
+        <label class="exam" title="Exam date, used by “remind me before the exam”"><span>Exam</span><input type="date" class="cexam" value="${esc(c.examDate || "")}" aria-label="Exam date for ${esc(c.name)}"></label>
         ${c.classCode ? `<span class="code" title="Class code">${esc(c.classCode)}</span>` : `<button class="btn small" data-share="${c.id}" ${user ? "" : "disabled title='Sign in first'"}>Share as class</button>`}</div>`).join("")}</div>
       <form class="row" id="sJoin"><input id="sCode" maxlength="8" placeholder="Class code" ${user ? "" : "disabled"}><select id="sJoinCourse" aria-label="Put this class on course" ${user ? "" : "disabled"}>${courses.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><button class="btn" ${user ? "" : "disabled"}>Join class</button></form>
       ${user ? "" : `<p class="muted small">${syncConfigured() ? "Sign in to share or join a class." : "Classes need accounts, which aren't set up on this server."}</p>`}
@@ -45,10 +49,16 @@ export async function openSettings(section?: string, onChanged?: () => void) {
 
   const name = $("#sName", panel) as HTMLInputElement;
   name.onchange = () => putMeta({ displayName: name.value.trim() });
-  $("#sOut", panel)?.addEventListener("click", async () => {
-    try { await signOut(); toast("Signed out. Your notes were removed from this device and are safe in your account."); onChanged?.(); openSettings(); }
-    catch (err) { toast((err as Error).message, 5000); }
-  });
+  const out = async (removeDeviceCopy: boolean) => {
+    try {
+      const r = await signOut({ removeDeviceCopy });
+      toast(removeDeviceCopy ? "Signed out and removed from this device. Your notes are in your account." : r.unsynced ? `Signed out. ${r.unsynced} change${r.unsynced === 1 ? " is" : "s are"} kept on this device and will upload when you sign in again.` : "Signed out. Your notes are in your account.", 5000);
+      setTimeout(() => location.reload(), 900);
+    } catch (err) { toast((err as Error).message, 7000); }
+  };
+  $("#sOut", panel)?.addEventListener("click", () => out(false));
+  const outRm = $("#sOutRemove", panel);
+  if (outRm) armButton(outRm, "Sign out and remove from this device", "Tap again to remove this device's copy", () => out(true));
   ($("#sIn", panel) as HTMLFormElement | null)?.addEventListener("submit", async e => {
     e.preventDefault();
     const email = ($("#sEmail", panel!) as HTMLInputElement).value.trim();
@@ -58,6 +68,10 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   panel.querySelectorAll<HTMLInputElement>(".cname").forEach(inp => inp.onchange = async () => {
     const c = course(inp.closest<HTMLElement>(".crow")!.dataset.id!);
     if (c && inp.value.trim()) { await putCourse({ ...c, name: inp.value.trim().toUpperCase() }); onChanged?.(); }
+  });
+  panel.querySelectorAll<HTMLInputElement>(".cexam").forEach(inp => inp.onchange = async () => {
+    const c = course(inp.closest<HTMLElement>(".crow")!.dataset.id!);
+    if (c) await putCourse({ ...c, examDate: /^\d{4}-\d\d-\d\d$/.test(inp.value) ? inp.value : null });
   });
   panel.querySelectorAll<HTMLButtonElement>("[data-share]").forEach(b => b.onclick = async () => {
     const c = course(b.dataset.share!);
@@ -93,10 +107,27 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   if ($("#sImport", panel)) ($("#sImport", panel) as HTMLInputElement).onchange = async e => {
-    const f = (e.target as HTMLInputElement).files?.[0];
+    const input = e.target as HTMLInputElement, f = input.files?.[0];
+    input.value = "";
     if (!f) return;
-    try { await importAll(await f.text()); toast("Backup restored."); onChanged?.(); closeSettings(); }
-    catch (err) { toast((err as Error).message || "Couldn't read that backup."); }
+    if (f.size > MAX_BACKUP_BYTES) { toast("That backup is too large to restore here."); return; }
+    let b: ReturnType<typeof validateBackup>;
+    try { b = validateBackup(await f.text()); }
+    catch (err) { toast((err as Error).message || "Couldn't read that backup.", 6000); return; }
+    // Show what will happen before anything changes.
+    const box = document.createElement("div");
+    box.className = "restorebox";
+    const s = b.summary;
+    box.innerHTML = `<p><b>Restore this backup?</b>${s.exportedAt ? ` <span class="muted small">Made ${esc(new Date(s.exportedAt).toLocaleString())}</span>` : ""}</p>
+      <p>${s.notes} note${s.notes === 1 ? "" : "s"}, ${s.markers} marker${s.markers === 1 ? "" : "s"} and ${s.courses} course${s.courses === 1 ? "" : "s"} will be added.${s.replaces ? ` ${s.replaces} item${s.replaces === 1 ? "" : "s"} already here will be replaced by the backup's version.` : " Nothing here is replaced."}</p>
+      <div class="row"><button class="btn primary" id="rGo">Restore</button><button class="btn" id="rSave">Download what's here first</button><button class="btn" id="rNo">Cancel</button></div>`;
+    $("#sExport", panel!)!.closest("section")!.appendChild(box);
+    $("#rNo", box)!.onclick = () => box.remove();
+    $("#rSave", box)!.onclick = () => $("#sExport", panel!)!.click();
+    $("#rGo", box)!.onclick = async () => {
+      try { await restoreBackup(b); toast("Backup restored."); onChanged?.(); closeSettings(); }
+      catch (err) { console.warn(err); toast("Couldn't restore that backup. Nothing was changed.", 6000); }
+    };
   };
   const demoBtn = $("#sDemo", panel);
   if (demoBtn) armButton(demoBtn, "Remove sample notes", "Tap again to remove them", async () => {
