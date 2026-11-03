@@ -2,6 +2,7 @@ import { courseColor, courseName, liveMarkers, liveNotes, note, putMarker, putMe
 import { leaderboard, logRecallPoints, currentUser, syncConfigured } from "../sync";
 import type { Marker, Note } from "../types";
 import { $, agoLong, DAY, dayKey, esc, H, reducedMotion, wrapDeg } from "../util";
+import { setPendingOpen, TYPE_INFO } from "../editor/markerBox";
 
 /* The home screen: a morning strip over a spinning dial of notes arranged by when they were last opened.
    Recall plays inside the dial's center while the ring turns to each question's note. */
@@ -96,6 +97,33 @@ function closeLb() {
   if (p) { p.hidden = true; $("#lbBtn")?.setAttribute("aria-expanded", "false"); }
 }
 
+/* ---------- Follow a thought: the markers you touched most recently ---------- */
+function renderFollow() {
+  const el = $("#follow");
+  if (!el) return;
+  const all = liveMarkers();
+  const recent = [...all].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
+  if (!recent.length) {
+    el.innerHTML = `<div class="followhead"><h2>Follow a thought.</h2></div><p class="followempty">Markers you place show up here, so you can pick a thought back up from anywhere.</p>`;
+    return;
+  }
+  el.innerHTML = `<div class="followhead"><h2>Follow a thought.</h2><span>${all.length} living point${all.length === 1 ? "" : "s"} in your notes</span></div>
+    <div class="fcards">${recent.map(m => {
+      const n = note(m.noteId);
+      const saved = m.thread.filter(t => t.role !== "user").length + (m.draft?.trim() ? 1 : 0);
+      return `<button class="fcard" data-m="${m.id}" data-type="${m.type}">
+        <span class="fpath"><i class="fdot" data-mastery="${m.mastery}"></i>${esc(courseName(n?.courseId))} / ${esc(n?.title || "")}</span>
+        <span class="ftext">${m.text ? esc(m.text.length > 140 ? m.text.slice(0, 140) + "…" : m.text) : `<em>A blank point · ${esc(TYPE_INFO[m.type].label.toLowerCase())}</em>`}</span>
+        <span class="fmeta">${saved} saved item${saved === 1 ? "" : "s"} · ${agoLong(m.updatedAt)} · <b>Open marker ↗</b></span></button>`;
+    }).join("")}</div>`;
+  el.querySelectorAll<HTMLButtonElement>(".fcard").forEach(b => b.onclick = () => {
+    const m = state.markers.get(b.dataset.m!);
+    if (!m) return;
+    setPendingOpen(m.id);
+    handlers?.openNote(m.noteId);
+  });
+}
+
 /* ---------- dial ---------- */
 function layout() {
   const notes = liveNotes().sort((a, b) => b.openedAt - a.openedAt);
@@ -149,10 +177,15 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
         <div class="hubacts">
           <button class="hbtn" data-act="import" title="Import lecture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg><span>Import lecture</span></button>
           <button class="hbtn" data-act="blank" title="Blank page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6M9 15h6"/></svg><span>Blank page</span></button></div></div></div>
-    <div id="infoSlot"></div><div class="spinhint">Drag or scroll to spin back through time · hover a folder to look inside</div></div>`;
+    <div id="infoSlot"></div>
+    <div class="spinrow"><button class="spinbtn" id="spinPrev" aria-label="Spin toward newer notes">←</button><span class="spinhint">Drag or scroll to move through time · select a folder to peek inside</span><button class="spinbtn" id="spinNext" aria-label="Spin toward older notes">→</button></div>
+    <section class="follow" id="follow"></section></div>`;
   $("#folders")!.innerHTML = items.map(itemHTML).join("");
   $("#hub")!.querySelectorAll<HTMLButtonElement>(".hbtn").forEach(b => b.onclick = () => (b.dataset.act === "blank" ? h.newBlank() : h.importFile()));
   renderMorning();
+  renderFollow();
+  $("#spinPrev")!.onclick = () => goTo(sel - 1);
+  $("#spinNext")!.onclick = () => goTo(sel + 1);
   sel = -1; hoverF = -1; hoverNote = null;
   sizeDial();
   bindDial();

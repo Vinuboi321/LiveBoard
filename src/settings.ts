@@ -38,7 +38,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       ${user ? "" : `<p class="muted small">${syncConfigured() ? "Sign in to share or join a class." : "Classes need accounts, which aren't set up on this server."}</p>`}
     </section>
     <section><h3>Backup</h3>
-      <div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>
+      ${import.meta.env.VITE_ARTIFACT ? `<p class="muted small">This is a preview. Backups download from the installed app.</p>` : `<div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>`}
       <button class="btn danger" id="sWipe">Delete everything on this device</button>
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
@@ -79,7 +79,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       onChanged?.();
     } catch (err) { toast((err as Error).message); }
   };
-  $("#sExport", panel)!.onclick = async () => {
+  if ($("#sExport", panel)) $("#sExport", panel)!.onclick = async () => {
     const blob = new Blob([await exportAll()], { type: "application/json" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -89,7 +89,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
-  ($("#sImport", panel) as HTMLInputElement).onchange = async e => {
+  if ($("#sImport", panel)) ($("#sImport", panel) as HTMLInputElement).onchange = async e => {
     const f = (e.target as HTMLInputElement).files?.[0];
     if (!f) return;
     try { await importAll(await f.text()); toast("Backup restored."); onChanged?.(); closeSettings(); }

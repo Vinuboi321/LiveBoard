@@ -277,7 +277,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   if (pend) setTimeout(() => {
     const el = document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(pend)}"]`);
     el?.scrollIntoView({ block: "center" });
-    openBox(pend, el, "related");
+    openBox(pend, el);
   }, 120);
   if (!n.plain.trim() && n.title === "Untitled note") title.select();
 }

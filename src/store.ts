@@ -160,6 +160,6 @@ export async function importAll(json: string) {
 }
 export async function wipeLocal() {
   await db.delete();
-  location.hash = "#/";
+  location.hash = "";
   location.reload();
 }

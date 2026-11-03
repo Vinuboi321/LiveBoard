@@ -19,8 +19,13 @@ export function textToHtml(t: string) {
 async function pdfToHtml(file: File) {
   toast("Reading PDF…", 8000);
   const pdfjs = await import("pdfjs-dist");
-  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
-  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  if (import.meta.env.VITE_ARTIFACT) {
+    // Inside an artifact there's no separate worker file, so PDF.js runs its worker code on the page.
+    (globalThis as unknown as { pdfjsWorker: unknown }).pdfjsWorker = await import("pdfjs-dist/build/pdf.worker.min.mjs");
+  } else {
+    const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+  }
   const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
   const pages = Math.min(doc.numPages, 150);
   let html = "";

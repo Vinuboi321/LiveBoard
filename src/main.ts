@@ -12,14 +12,14 @@ const stage = () => $("#stage")!;
 let currentNote: string | null = null;
 
 function route() {
-  const m = location.hash.match(/^#\/note\/([\w-]+)/);
+  const m = location.hash.match(/^#note-([\w-]+)/);
   if (m) showNote(m[1]);
   else showHome();
 }
 
 async function showHome() {
   await leaveNote();
-  if (location.hash.startsWith("#/note")) history.replaceState(null, "", "#/");
+  if (location.hash.startsWith("#note-")) history.replaceState(null, "", location.pathname + location.search);
   renderHome(stage(), { openNote, newBlank, importFile: () => ($("#fileIn") as HTMLInputElement).click(), openSettings: s => openSettings(s, refresh) });
 }
 
@@ -34,16 +34,17 @@ async function leaveNote() {
 }
 
 function showNote(id: string) {
-  if (!note(id) || note(id)!.deleted) { location.hash = "#/"; return; }
+  if (!note(id) || note(id)!.deleted) { goHome(); return; }
   destroyHome();
   if (currentNote && currentNote !== id) { destroyNote(); }
   currentNote = id;
   setFocusNote(id);
   stage().scrollTop = 0;
-  renderNote(stage(), id, () => { location.hash = "#/"; }, openNote);
+  renderNote(stage(), id, goHome, openNote);
 }
 
-function openNote(id: string) { location.hash = `#/note/${id}`; }
+function openNote(id: string) { location.hash = `note-${id}`; }
+function goHome() { if (location.hash) location.hash = ""; else route(); }
 
 function currentCourseId() {
   const recent = [...liveNotes()].sort((a, b) => b.openedAt - a.openedAt)[0];

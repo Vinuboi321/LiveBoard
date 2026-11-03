@@ -28,11 +28,14 @@ let tab: Tab = "ask";
 let busy = false;
 let aiOn: boolean | null = null;
 let pendingOpen: string | null = null;
-let lastCalc = ""; // shown at the top of the Calculate tab after a run
+let lastCalc = "";
+let reopenTab: Tab | null = null; // shown at the top of the Calculate tab after a run
 let openNoteFn: (id: string) => void = () => {};
 export const setOpenNote = (fn: (id: string) => void) => { openNoteFn = fn; };
 export const boxOpen = () => !!ws;
 export const takePendingOpen = () => { const p = pendingOpen; pendingOpen = null; return p; };
+function takeReopenTab() { const t = reopenTab; reopenTab = null; return t; }
+export const setPendingOpen = (id: string) => { pendingOpen = id; };
 aiHealth().then(h => { aiOn = h.ai; if (ws) render(); });
 
 export function closeBox() {
@@ -50,7 +53,7 @@ export function openBox(id: string, _anchor?: Element | null, startTab?: Tab) {
   closeBox();
   current = m;
   lastCalc = "";
-  tab = startTab || (!m.text ? "write" : m.thread.length || m.type !== "question" ? "ask" : "ask");
+  tab = startTab || takeReopenTab() || (!m.text ? "write" : m.thread.length || m.type !== "question" ? "ask" : "ask");
   ws = document.createElement("aside");
   ws.className = "mws";
   ws.setAttribute("role", "dialog");
@@ -349,6 +352,7 @@ function bindTab() {
       const nid = target ? target.noteId : b.dataset.note!;
       if (target && target.noteId === m.noteId) { openBox(target.id, null, "related"); document.querySelector(`.pin[data-pin="${CSS.escape(target.id)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); return; }
       pendingOpen = target ? target.id : null;
+      reopenTab = "related";
       closeBox();
       openNoteFn(nid);
     });

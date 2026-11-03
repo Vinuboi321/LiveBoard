@@ -1,8 +1,11 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const artifact = !!process.env.ARTIFACT; // single-file build for a claude.ai artifact preview
+
 export default defineConfig({
-  plugins: [
+  define: { "import.meta.env.VITE_ARTIFACT": JSON.stringify(artifact ? "1" : "") },
+  plugins: artifact ? [] : [
     VitePWA({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
@@ -37,5 +40,7 @@ export default defineConfig({
     // During local dev, `vercel dev` serves /api. With plain `vite`, point this at a running `vercel dev`.
     proxy: process.env.API_PROXY ? { "/api": process.env.API_PROXY } : undefined
   },
-  build: { target: "es2022", chunkSizeWarningLimit: 1600 }
+  build: artifact
+    ? { target: "es2022", outDir: "dist-artifact", cssCodeSplit: false, assetsInlineLimit: 100_000_000, modulePreload: false, chunkSizeWarningLimit: 99999, rollupOptions: { output: { inlineDynamicImports: true } } }
+    : { target: "es2022", chunkSizeWarningLimit: 1600 }
 });
