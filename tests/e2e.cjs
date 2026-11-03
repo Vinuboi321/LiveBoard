@@ -57,6 +57,7 @@ const MOCK = intent => {
     const calc = await p.textContent(".mcalc b");
     check(/0\.0042/.test(calc), `math runs locally and exactly (${calc})`);
     await p.keyboard.press("Escape");
+    await p.waitForTimeout(250);
     check(!(await p.$(".mws")), "Escape closes the marker box");
 
     // place a marker on a selection and ask the AI
@@ -270,6 +271,7 @@ const MOCK = intent => {
     await p.screenshot({ path: `${OUT}/08-phone-marker.png` });
     check(true, "phone: marker box opens as a bottom sheet");
     await p.click("#mClose");
+    await p.waitForTimeout(250);
     check(!(await p.$(".mws")), "phone: marker sheet closes");
     await ctx.close();
   }

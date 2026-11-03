@@ -374,20 +374,19 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
           const d = `M${a.x.toFixed(1)} ${a.y.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
           const g = `sg${gi++}`;
           paths += `<defs><linearGradient id="${g}" gradientUnits="userSpaceOnUse" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><stop offset="0" stop-color="${color(m.type)}"/><stop offset="1" stop-color="${color(other.type)}"/></linearGradient></defs>
-            <g class="string" data-a="${mid}" data-b="${oid}"><path class="sline" d="${d}" stroke="url(#${g})"/><path class="sglow" d="${d}" stroke="url(#${g})"/>
-            <circle class="sbead" r="2.6" fill="url(#${g})"><animateMotion dur="${(2.4 + dist / 260).toFixed(2)}s" repeatCount="indefinite" path="${d}"/></circle></g>`;
+            <g class="string" data-a="${mid}" data-b="${oid}" filter="url(#fuzz)"><path class="sline" d="${d}" stroke="url(#${g})"/><path class="sfiber" d="${d}" stroke="url(#${g})" transform="translate(0 -.8)"/><path class="sfiber b" d="${d}" stroke="url(#${g})" transform="translate(0 .8)"/></g>`;
         } else if (note(other.noteId) && !note(other.noteId)!.deleted) {
           // the other end lives in another note: a short dangling thread ending in a tag
           const left = a.x > wr.width * 0.55; // near the right edge, the thread swings down and to the left
           const ex = left ? a.x - 64 : a.x + 64, ey = a.y + 30 + (gi % 3) * 22;
           gi++;
           const d = `M${a.x.toFixed(1)} ${a.y.toFixed(1)} Q${((a.x + ex) / 2).toFixed(1)} ${(ey + 16).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
-          paths += `<g class="string out" data-a="${mid}"><path class="sline" d="${d}" stroke="${color(m.type)}"/></g>`;
+          paths += `<g class="string out" data-a="${mid}" filter="url(#fuzz)"><path class="sline" d="${d}" stroke="${color(m.type)}"/><path class="sfiber" d="${d}" stroke="${color(m.type)}"/></g>`;
           tagHtml += `<button class="stringtag ${left ? "toleft" : ""}" data-open-marker="${oid}" data-type="${other.type}" style="left:${ex}px;top:${ey}px" title="Linked to a point in ${esc(note(other.noteId)!.title)}">↗ ${esc(note(other.noteId)!.title.slice(0, 28))}</button>`;
         }
       }
     }
-    svg.innerHTML = paths;
+    svg.innerHTML = `<defs><filter id="fuzz" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="1.6" xChannelSelector="R" yChannelSelector="G"/></filter></defs>` + paths;
     tags.innerHTML = tagHtml;
   }
   $("#stringTags", stage)!.addEventListener("click", e => {

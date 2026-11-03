@@ -40,19 +40,24 @@ aiHealth().then(h => { aiOn = h.ai; if (ws) render(); });
 
 export function closeBox() {
   saveDraft.flush();
-  ws?.remove();
+  if (ws) {
+    const el = ws;
+    el.classList.add("closing");
+    setTimeout(() => el.remove(), 160);
+  }
   ws = null;
   current = null;
   document.body.classList.remove("ws-open");
 }
 
-export function openBox(id: string, _anchor?: Element | null, startTab?: Tab) {
+export function openBox(id: string, anchorEl?: Element | null, startTab?: Tab) {
   const m = state.markers.get(id);
   if (!m) return;
   if (ws && current?.id === id) { if (startTab) { tab = startTab; render(); } return; }
   closeBox();
   current = m;
   lastCalc = "";
+  moved = false;
   tab = startTab || takeReopenTab() || (!m.text ? "write" : m.thread.length || m.type !== "question" ? "ask" : "ask");
   ws = document.createElement("aside");
   ws.className = "mws";
@@ -61,9 +66,64 @@ export function openBox(id: string, _anchor?: Element | null, startTab?: Tab) {
   document.body.appendChild(ws);
   document.body.classList.add("ws-open");
   render();
+  placeCard(anchorEl || pinEl(id));
   revealPin(id);
   // on phones, focusing a field would pop the keyboard over the note; let the student tap in when ready
   if (innerWidth >= 900) setTimeout(() => (ws?.querySelector<HTMLElement>("[data-autofocus]"))?.focus({ preventScroll: true }), 40);
+}
+
+/* ---------- the card: opens out of its marker, floats over the page, can be dragged by its header ---------- */
+const pinEl = (id: string) => document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(id)}"]`);
+let moved = false; // the student dragged the card; keep it where they put it
+
+function placeCard(anchor: Element | null) {
+  if (!ws) return;
+  const vw = innerWidth, vh = innerHeight, top0 = 68;
+  const a = anchor?.getBoundingClientRect();
+  let W: number, H: number, left: number, top: number;
+  if (vw < 900) {
+    W = vw - 24;
+    H = Math.round(vh * (ws.classList.contains("tall") ? 0.86 : 0.58));
+    left = 12;
+    top = vh - H - 12;
+  } else {
+    W = Math.min(540, vw - 48);
+    H = Math.min(680, vh - top0 - 28);
+    if (a) {
+      // beside the marker when there's room, otherwise over the page, never glued to an edge
+      left = a.right + 28 + W <= vw - 24 ? a.right + 28 : a.left - 28 - W >= 24 ? a.left - 28 - W : (vw - W) / 2;
+      top = Math.min(Math.max(a.top - 140, top0 + 8), vh - H - 20);
+    } else { left = (vw - W) / 2; top = top0 + 12; }
+  }
+  Object.assign(ws.style, { left: `${Math.round(left)}px`, top: `${Math.round(top)}px`, width: `${Math.round(W)}px`, height: `${Math.round(H)}px` });
+  if (a) ws.style.transformOrigin = `${Math.round(a.left + a.width / 2 - left)}px ${Math.round(a.top + a.height / 2 - top)}px`;
+}
+function clampCard() {
+  if (!ws) return;
+  const r = ws.getBoundingClientRect();
+  const left = Math.min(Math.max(r.left, 8), innerWidth - r.width - 8), top = Math.min(Math.max(r.top, 60), innerHeight - Math.min(r.height, innerHeight - 70) - 8);
+  ws.style.left = `${left}px`;
+  ws.style.top = `${top}px`;
+}
+addEventListener("resize", () => { if (!ws || !current) return; if (moved) clampCard(); else placeCard(pinEl(current.id)); });
+
+function bindDrag() {
+  if (!ws || innerWidth < 900) return;
+  const head = ws.querySelector<HTMLElement>(".wshead");
+  if (!head) return;
+  head.onpointerdown = e => {
+    if ((e.target as Element).closest("button") || !ws) return;
+    const r = ws.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+    head.setPointerCapture(e.pointerId);
+    ws.classList.add("dragging");
+    head.onpointermove = ev => {
+      if (!ws) return;
+      moved = true;
+      ws.style.left = `${Math.min(Math.max(r.left + ev.clientX - sx, 8), innerWidth - r.width - 8)}px`;
+      ws.style.top = `${Math.min(Math.max(r.top + ev.clientY - sy, 60), innerHeight - 80)}px`;
+    };
+    head.onpointerup = head.onpointercancel = () => { head.onpointermove = null; ws?.classList.remove("dragging"); };
+  };
 }
 
 /** Keep the marker visible beside or above the workspace instead of hidden behind it. */
@@ -141,7 +201,8 @@ function render() {
 function bindCommon() {
   if (!ws || !current) return;
   $("#mClose", ws)!.onclick = closeBox;
-  $("#mGrab", ws)!.onclick = () => { ws!.classList.toggle("tall"); render(); };
+  $("#mGrab", ws)!.onclick = () => { ws!.classList.toggle("tall"); render(); placeCard(current ? pinEl(current.id) : null); };
+  bindDrag();
   ws.querySelectorAll<HTMLButtonElement>(".wstabs button").forEach(b => b.onclick = () => { saveDraft.flush(); tab = b.dataset.tab as Tab; render(); });
   ws.querySelector<HTMLElement>(".wstabs")!.onkeydown = e => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
