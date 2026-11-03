@@ -11,11 +11,11 @@ const COURSES: [string, string, string][] = [
   ["demo-calc", "AP CALC BC", "#F15BB5"], ["demo-phys", "AP PHYSICS C", "#FFB703"], ["demo-csa", "AP CSA", "#2EC4B6"], ["demo-stats", "AP STATS", "#FF5A5F"]
 ];
 
-interface M { id: string; text: string; type: MarkerType; mastery?: Mastery; ago?: number; dueIn?: number; thread?: [ThreadMsg["role"], string, string?, string?][]; q?: string; a?: string; links?: string[]; remindIn?: number; out?: string }
-const pin = (m: M) => `<span data-marker="${m.id}">${esc(m.text)}</span><span data-pin="${m.id}"></span>`;
+interface M { id: string; text: string; type: MarkerType; free?: [number, number]; mastery?: Mastery; ago?: number; dueIn?: number; thread?: [ThreadMsg["role"], string, string?, string?][]; q?: string; a?: string; links?: string[]; remindIn?: number; out?: string }
+const pin = (m: M) => m.free ? `<span data-pin="${m.id}" data-dx="${m.free[0]}" data-dy="${m.free[1]}"></span>` : `<span data-marker="${m.id}">${esc(m.text)}</span><span data-pin="${m.id}"></span>`;
 
 export async function seedDemo() {
-  if (state.meta.demoSeeded) return;
+  if ((state.meta.demoVersion || 0) >= 3) return;
   const now = Date.now();
   for (const [id, name, color] of COURSES) {
     const c: Course = { id, name, color, updatedAt: now };
@@ -28,16 +28,19 @@ export async function seedDemo() {
       ms: [
         { id: "demo-m-atp", text: "As protons flow back through ATP synthase, ATP is produced.", type: "question", ago: 2 * H, dueIn: -H,
           thread: [["user", "How does the gradient actually turn the enzyme?"], ["self", "Protons move down their gradient through the channel, which spins part of ATP synthase like a turbine; the spinning drives ADP + Pi together."]],
-          q: "How does the proton gradient help a mitochondrion produce ATP?", a: "Protons flowing back through ATP synthase spin it, and that motion joins ADP and phosphate into ATP." },
+          q: "How does the proton gradient help a mitochondrion produce ATP?", a: "Protons flowing back through ATP synthase spin it, and that motion joins ADP and phosphate into ATP.", links: ["demo-m-etc", "demo-m-free"] },
+        { id: "demo-m-free", text: "", type: "question", free: [46, 18], ago: 90 * 60000, dueIn: DAY, links: ["demo-m-atp", "demo-m-spaced"],
+          thread: [["user", "Is this the same thing chloroplasts do?"], ["self", "Yes. Chloroplasts also use a proton gradient and ATP synthase, but the energy comes from light instead of food."]],
+          q: "What do mitochondria and chloroplasts have in common for making ATP?", a: "Both build a proton gradient and let protons flow back through ATP synthase." },
         { id: "demo-m-etc", text: "The electron transport chain pumps protons into the intermembrane space", type: "explain", mastery: 1, ago: 3 * H, dueIn: -H,
           thread: [["user", "Explain this simpler"], ["marker", "Think of the chain as a series of pumps. As electrons are handed down it, the energy released is used to push H⁺ out of the matrix, building up a crowd of protons on one side of the membrane. That crowd is the stored energy ATP synthase uses next.", "", ""]],
-          q: "Where does the electron transport chain pump protons, and why does that matter?", a: "Into the intermembrane space, building the gradient that powers ATP synthase.",
+          q: "Where does the electron transport chain pump protons, and why does that matter?", a: "Into the intermembrane space, building the gradient that powers ATP synthase.", links: ["demo-m-atp"],
           out: "Plain version: each step of the chain uses electron energy to pump H⁺ out of the matrix. The pile-up of protons is stored energy." },
         { id: "demo-m-yield", text: "about 30 ATP per glucose", type: "math", mastery: 2, ago: 4 * H, dueIn: 4 * DAY,
           thread: [["user", "30 * 30.5 kJ/mol"], ["marker", "", "30 * 30.5 kJ/mol", "915 kJ / mol"]],
           q: "Roughly how much energy is captured as ATP from one glucose?", a: "About 30 ATP × 30.5 kJ/mol ≈ 915 kJ/mol." }
       ],
-      html: ms => `<h2>Mitochondria</h2><p>Mitochondria are where most of a cell's ATP is made. The inner membrane is folded into cristae, which gives it a large surface area for the reactions below.</p>
+      html: ms => `<h2>Mitochondria${pin(ms["demo-m-free"])}</h2><p>Mitochondria are where most of a cell's ATP is made. The inner membrane is folded into cristae, which gives it a large surface area for the reactions below.</p>
 <p>${pin(ms["demo-m-etc"])}, using energy from electrons carried by NADH and FADH₂.</p>
 <div data-marker-output="demo-m-etc" data-status="accepted"><p>${esc(ms["demo-m-etc"].out!)}</p></div>
 <p>${pin(ms["demo-m-atp"])} This is called chemiosmosis.</p>
@@ -46,7 +49,7 @@ export async function seedDemo() {
     {
       id: "demo-n-psych", course: "demo-psych", title: "How memory sticks", kind: "lecture", ago: 6 * H,
       ms: [
-        { id: "demo-m-spaced", text: "Spaced practice distributes learning over time.", type: "explain", mastery: 1, ago: 6 * H, dueIn: -H, links: ["demo-m-attempt"],
+        { id: "demo-m-spaced", text: "Spaced practice distributes learning over time.", type: "explain", mastery: 1, ago: 6 * H, dueIn: -H, links: ["demo-m-attempt", "demo-m-free"],
           thread: [["user", "Give me an example"], ["marker", "Instead of studying a chapter for 3 hours the night before, study it for 45 minutes on four different days. Same total time, much better recall a week later.", "", ""]],
           q: "Why does spacing study sessions beat cramming?", a: "Gaps let some forgetting happen, so each review has to rebuild the memory, which makes it stronger." },
         { id: "demo-m-attempt", text: "Attempting", type: "question", ago: 7 * H, dueIn: -H, links: ["demo-m-spaced"],
@@ -133,7 +136,7 @@ export async function seedDemo() {
     await db.markers.put(rec);
   }
   const days = [1, 2, 3, 4, 5].map(i => dayKey(now - i * DAY));
-  await putMeta({ demoSeeded: true, studyDays: [...new Set([...state.meta.studyDays, ...days])], points: Math.max(state.meta.points, 58) });
+  await putMeta({ demoSeeded: true, demoVersion: 3, studyDays: [...new Set([...state.meta.studyDays, ...days])], points: Math.max(state.meta.points, 58) });
 }
 
 export async function removeDemo() {

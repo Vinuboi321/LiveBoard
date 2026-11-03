@@ -61,8 +61,28 @@ export function openBox(id: string, _anchor?: Element | null, startTab?: Tab) {
   document.body.appendChild(ws);
   document.body.classList.add("ws-open");
   render();
-  setTimeout(() => (ws?.querySelector<HTMLElement>("[data-autofocus]"))?.focus({ preventScroll: true }), 40);
+  revealPin(id);
+  // on phones, focusing a field would pop the keyboard over the note; let the student tap in when ready
+  if (innerWidth >= 900) setTimeout(() => (ws?.querySelector<HTMLElement>("[data-autofocus]"))?.focus({ preventScroll: true }), 40);
 }
+
+/** Keep the marker visible beside or above the workspace instead of hidden behind it. */
+function revealPin(id: string) {
+  const el = document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(id)}"]`), stage = document.getElementById("stage");
+  if (!el || !stage || !ws) return;
+  requestAnimationFrame(() => {
+    if (!ws) return;
+    const r = el.getBoundingClientRect(), w = ws.getBoundingClientRect();
+    if (innerWidth < 900) {
+      const room = w.top - 70; // visible space above the sheet
+      const want = 70 + Math.max(40, room * 0.4);
+      if (r.top < 70 || r.bottom > w.top - 10) stage.scrollBy({ top: r.top - want, behavior: "smooth" });
+    } else if (r.right > w.left - 8 && r.left > w.left - 40) {
+      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+    }
+  });
+}
+const isFree = (id: string) => !!document.querySelector(`#editor .pin.free[data-pin="${CSS.escape(id)}"]`);
 
 /* ---------- shared bits ---------- */
 async function update(patch: Partial<Marker>, rerender = true) {
@@ -93,12 +113,13 @@ function render() {
   const linkCount = (m.links || []).length + (m.linkNoteId ? 1 : 0);
   ws.dataset.type = m.type;
   ws.innerHTML = `
+    <button class="wsgrab" id="mGrab" aria-label="${ws.classList.contains("tall") ? "Shrink" : "Expand"} marker workspace"><i></i></button>
     <div class="wshead">
       <span class="eyebrow"><i class="tdot"></i>Marker workspace · ${TYPE_INFO[m.type].label}</span>
       <button class="mx" id="mClose" aria-label="Close marker">×</button>
     </div>
     <div class="wsanchor">
-      ${m.text ? `<blockquote>${esc(m.text)}</blockquote>` : `<blockquote class="blank">A blank point in your note. Write, draft or generate here.</blockquote>`}
+      ${m.text ? `<blockquote>${esc(m.text)}</blockquote>` : `<blockquote class="blank">${isFree(m.id) ? "A free point on your page." : "A blank point in your note."} Write, draft or generate here.</blockquote>`}
       <div class="wsmeta"><span>Anchored in ${esc(n?.title || "this note")}</span><span>${esc(courseName(n?.courseId))}</span><span>Placed ${agoLong(m.createdAt)}</span></div>
       <div class="wschips"><span class="chipm" data-mastery="${m.mastery}"><i></i>${MASTERY[m.mastery]}</span>${m.recallOff ? `<span class="chipm off">Not in recall</span>` : `<span class="chipm">Review ${m.due <= Date.now() ? "due now" : new Date(m.due).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>`}${linkCount ? `<span class="chipm">${linkCount} link${linkCount > 1 ? "s" : ""}</span>` : ""}</div>
     </div>
@@ -120,6 +141,7 @@ function render() {
 function bindCommon() {
   if (!ws || !current) return;
   $("#mClose", ws)!.onclick = closeBox;
+  $("#mGrab", ws)!.onclick = () => { ws!.classList.toggle("tall"); render(); };
   ws.querySelectorAll<HTMLButtonElement>(".wstabs button").forEach(b => b.onclick = () => { saveDraft.flush(); tab = b.dataset.tab as Tab; render(); });
   ws.querySelector<HTMLElement>(".wstabs")!.onkeydown = e => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;

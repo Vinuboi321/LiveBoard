@@ -251,12 +251,21 @@ button:disabled { cursor: default; opacity: .6; }
 .floatbtn.plus { width: 30px; height: 30px; border-radius: 50%; background: var(--cobalt); color: #fff; font: 700 20px/1 var(--display); padding: 0; display: grid; place-items: center; }
 
 /* Marker workspace: docked beside the page on wide screens, a tall sheet on phones */
-.mws { position: fixed; z-index: 900; top: calc(68px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); bottom: 16px; width: min(460px, calc(100vw - 32px));
+.mws { position: fixed; z-index: 900; top: calc(68px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); bottom: 16px; width: clamp(360px, 34vw, 440px);
   display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 28px 70px rgba(10, 20, 35, .28); overflow: hidden; animation: slide .22s ease-out; }
-body.ws-open .stage { padding-right: calc(min(460px, 100vw) + 40px); }
-@media (max-width: 1099px) { body.ws-open .stage { padding-right: max(16px, env(safe-area-inset-right, 0px)); } }
+/* The page slides over so the note and the workspace sit side by side */
+body.ws-open .stage { padding-right: calc(clamp(360px, 34vw, 440px) + 40px); transition: padding-right .22s ease-out; }
+.wsgrab { display: none; }
 @media (max-width: 899px) {
-  .mws { top: auto; left: 0; right: 0; bottom: 0; width: 100%; height: min(92vh, 92dvh); border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); animation: up .25s ease-out; }
+  /* Phones: a sheet over the lower part of the screen; the note stays readable above it. Drag handle expands it. */
+  body.ws-open .stage { padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-bottom: 60vh; }
+  .mws { top: auto; left: 0; right: 0; bottom: 0; width: 100%; height: min(56vh, 56dvh); border-radius: 22px 22px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); animation: up .25s ease-out; transition: height .25s ease-out; }
+  .mws.tall { height: min(88vh, 88dvh); }
+  .wsgrab { display: grid; place-items: center; border: 0; background: none; height: 22px; padding: 0; flex: 0 0 auto; }
+  .wsgrab i { width: 44px; height: 5px; border-radius: 99px; background: var(--line); }
+  .mws .wshead { padding-top: 2px; }
+  .mws:not(.tall) .wschips, .mws:not(.tall) .wsmeta { display: none; }
+  .mws:not(.tall) .wsanchor blockquote { font-size: 16px; max-height: 3em; }
 }
 @keyframes up { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 .wshead { display: flex; align-items: center; gap: 8px; padding: 16px 16px 4px 20px; }
@@ -376,6 +385,32 @@ details.src mark { background: color-mix(in srgb, var(--tc) 25%, transparent); c
 #toast { position: fixed; left: 50%; bottom: max(24px, env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); background: var(--ink); color: var(--paper); padding: 9px 16px; border-radius: 99px; font-size: 13.5px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 1000; max-width: calc(100vw - 32px); text-align: center; }
 #toast.on { opacity: 1; transform: translate(-50%, 0); }
 
+
+/* Free markers: an invisible anchor in the text with the dot floating at an offset */
+.pinanchor { position: relative; display: inline-block; width: 0; height: 1em; vertical-align: text-top; }
+.pin.free { position: absolute; width: 20px; height: 20px; margin: 0; border-width: 3px; transform: translate(-50%, -50%); z-index: 3; touch-action: none; cursor: grab; box-shadow: 0 4px 12px color-mix(in srgb, var(--tc) 35%, transparent); vertical-align: 0; }
+.pin.free::after { content: ""; position: absolute; left: 50%; top: 100%; width: 2px; height: 7px; transform: translateX(-50%); background: var(--tc); border-radius: 2px; opacity: .7; }
+.pin.free:hover { transform: translate(-50%, -50%) scale(1.15); }
+.pin.free.dragging { cursor: grabbing; transform: translate(-50%, -50%) scale(1.25); z-index: 20; animation: none; }
+.paper.dropping, .paper.dropping .ProseMirror { cursor: crosshair; }
+.paper.dropping .editorwrap { outline: 2px dashed color-mix(in srgb, var(--cobalt) 45%, transparent); outline-offset: 10px; border-radius: 8px; }
+.tbtn.drop { color: var(--cobalt); border-color: color-mix(in srgb, var(--cobalt) 40%, var(--line)); }
+.tbtn.drop.on { background: var(--cobalt); color: #fff; border-color: var(--cobalt); }
+
+/* Strings between connected markers */
+.strings { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2; }
+.string .sline { fill: none; stroke-width: 1.3; opacity: .5; stroke-linecap: round; transition: opacity .2s, stroke-width .2s; }
+.string .sglow { fill: none; stroke-width: 7; opacity: 0; stroke-linecap: round; transition: opacity .2s; }
+.string.lit .sglow { opacity: .18; }
+.string.lit .sline { stroke-width: 2; opacity: 1; }
+.string.out .sline { stroke-dasharray: 3 4; }
+.string .sbead { opacity: .9; }
+.stringtags { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.stringtag { position: absolute; transform: translate(0, -50%); pointer-events: auto; border: 1px solid color-mix(in srgb, var(--tc) 45%, var(--line)); background: color-mix(in srgb, var(--tc) 10%, var(--paper)); color: var(--ink); border-radius: 99px; padding: 2px 9px; font: 11.5px var(--mono); white-space: nowrap; }
+.stringtag.toleft { transform: translate(-100%, -50%); }
+.stringtag:hover { border-color: var(--tc); }
+.stringtag { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .string .sbead { display: none; } }
 
 /* Spin controls and Follow a thought */
 .spinrow { display: flex; align-items: center; gap: 16px; justify-content: center; max-width: 100%; }

@@ -92,6 +92,56 @@ export function removeMarkerFromDoc(id: string) {
   }).run();
 }
 
+/** Where a free marker dropped at a screen point should live: the nearest text position, plus an offset to the point. */
+function anchorFor(x: number, y: number) {
+  if (!ed) return null;
+  const view = ed.view, box = view.dom.getBoundingClientRect();
+  const hit = view.posAtCoords({ left: Math.min(Math.max(x, box.left + 2), box.right - 2), top: Math.min(Math.max(y, box.top + 2), box.bottom - 2) });
+  if (!hit) return null;
+  let pos = hit.pos;
+  const $p = ed.state.doc.resolve(pos);
+  if (!$p.parent.inlineContent) {
+    // between blocks: use the start of the nearest textblock
+    let best: number | null = null;
+    ed.state.doc.descendants((n, p) => { if (best === null && n.isTextblock && p + 1 >= pos - 1) best = p + 1; return best === null; });
+    if (best === null) ed.state.doc.descendants((n, p) => { if (n.isTextblock) best = p + 1; });
+    if (best === null) return null;
+    pos = best;
+  }
+  const c = view.coordsAtPos(pos);
+  return { pos, dx: Math.round(x - c.left), dy: Math.round(y - c.top) };
+}
+
+export function dropFreeMarker(id: string, x: number, y: number) {
+  if (!ed) return false;
+  const a = anchorFor(x, y);
+  if (!a) return false;
+  ed.chain().insertContentAt(a.pos, { type: "pin", attrs: { id, dx: a.dx, dy: a.dy } }).run();
+  return true;
+}
+
+export function moveFreeMarker(id: string, x: number, y: number) {
+  if (!ed) return false;
+  const old = findPin(id);
+  if (old === null) return false;
+  const a = anchorFor(x, y);
+  if (!a) return false;
+  ed.chain().command(({ tr, state }) => {
+    tr.delete(old, old + 1);
+    const pos = tr.mapping.map(a.pos);
+    tr.insert(pos, state.schema.nodes.pin.create({ id, dx: a.dx, dy: a.dy }));
+    return true;
+  }).run();
+  // the anchor moved, so recompute the offset against where it actually landed
+  const p = findPin(id);
+  if (p !== null) {
+    const c = ed.view.coordsAtPos(p);
+    const dx = Math.round(x - c.left), dy = Math.round(y - c.top);
+    ed.chain().command(({ tr }) => { tr.setNodeMarkup(p, undefined, { id, dx, dy }); return true; }).run();
+  }
+  return true;
+}
+
 export function pinIds(): Set<string> {
   const ids = new Set<string>();
   ed?.state.doc.descendants(n => { if (n.type.name === "pin" && n.attrs.id) ids.add(n.attrs.id); });

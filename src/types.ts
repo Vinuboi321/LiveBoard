@@ -66,6 +66,7 @@ export interface Meta {
   updatedAt: number;
   seeded: boolean;
   demoSeeded?: boolean;
+  demoVersion?: number;
 }
 
 export interface AIResult {

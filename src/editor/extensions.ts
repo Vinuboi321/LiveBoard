@@ -28,7 +28,9 @@ export function repaintAll(root: ParentNode = document) {
   });
 }
 
-/* The marker itself: a small dot after the passage (or alone on an empty line). */
+/* The marker itself. Inline: a small dot after its passage. Free (dx/dy set): an invisible anchor in the text with
+   the dot floating at an offset from it, so it can sit anywhere on the page and still move with the words near it. */
+const num = (v: string | null) => (v === null || v === "" || isNaN(Number(v)) ? null : Number(v));
 export const Pin = Node.create({
   name: "pin",
   group: "inline",
@@ -37,21 +39,51 @@ export const Pin = Node.create({
   selectable: false,
   draggable: false,
   addAttributes() {
-    return { id: { default: null, parseHTML: el => el.getAttribute("data-pin"), renderHTML: a => ({ "data-pin": a.id }) } };
+    return {
+      id: { default: null, parseHTML: el => el.getAttribute("data-pin"), renderHTML: a => ({ "data-pin": a.id }) },
+      dx: { default: null, parseHTML: el => num(el.getAttribute("data-dx")), renderHTML: a => (a.dx === null ? {} : { "data-dx": a.dx }) },
+      dy: { default: null, parseHTML: el => num(el.getAttribute("data-dy")), renderHTML: a => (a.dy === null ? {} : { "data-dy": a.dy }) }
+    };
   },
   parseHTML() { return [{ tag: "span[data-pin]" }, { tag: "button[data-pin]" }]; },
   renderHTML({ HTMLAttributes }) { return ["span", mergeAttributes(HTMLAttributes, { class: "pin" })]; },
   addNodeView() {
     return ({ node }) => {
-      const dom = document.createElement("span");
-      dom.className = "pin";
-      dom.dataset.pin = node.attrs.id;
-      dom.contentEditable = "false";
-      dom.setAttribute("role", "button");
-      dom.setAttribute("aria-label", "Open marker");
-      dom.tabIndex = 0;
-      paintPin(dom);
-      return { dom, ignoreMutation: () => true };
+      let cur = node;
+      const dot = document.createElement("span");
+      dot.className = "pin";
+      dot.dataset.pin = node.attrs.id;
+      dot.setAttribute("role", "button");
+      dot.setAttribute("aria-label", "Open marker");
+      dot.tabIndex = 0;
+      const anchor = document.createElement("span");
+      anchor.className = "pinanchor";
+      anchor.contentEditable = "false";
+      const place = () => {
+        const free = cur.attrs.dx !== null && cur.attrs.dy !== null;
+        dot.classList.toggle("free", free);
+        if (free) {
+          if (dot.parentNode !== anchor) anchor.appendChild(dot);
+          dot.style.left = cur.attrs.dx + "px";
+          dot.style.top = cur.attrs.dy + "px";
+        } else { dot.style.left = dot.style.top = ""; }
+        paintPin(dot);
+      };
+      place();
+      const free = node.attrs.dx !== null && node.attrs.dy !== null;
+      if (!free) dot.contentEditable = "false";
+      return {
+        dom: free ? anchor : dot,
+        update(n) {
+          if (n.type !== cur.type) return false;
+          const wasFree = cur.attrs.dx !== null, isFree = n.attrs.dx !== null;
+          if (wasFree !== isFree) return false; // re-create the view when switching between inline and free
+          cur = n;
+          place();
+          return true;
+        },
+        ignoreMutation: () => true
+      };
     };
   }
 });

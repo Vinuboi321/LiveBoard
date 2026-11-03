@@ -208,6 +208,44 @@ const MOCK = intent => {
       check((await p.textContent(".streakchip b")).trim() === "1", "finishing recall starts the streak");
     }
 
+    // free markers: drop anywhere, drag, and connect with a string
+    await p.click("#info .openlink");
+    await p.waitForSelector("#editor .ProseMirror");
+    await p.waitForTimeout(300);
+    await p.click("#dropBtn");
+    const wrapBox = await p.locator("#ewrap").boundingBox();
+    await p.mouse.click(wrapBox.x + wrapBox.width - 60, wrapBox.y + 40);
+    await p.waitForSelector(".pin.free");
+    await p.waitForSelector(".mws blockquote.blank", { timeout: 3000 }).catch(() => {});
+    check(!!(await p.$(".mws blockquote.blank")), "drop mode places a free marker and opens it");
+    await p.keyboard.press("Escape");
+    await p.waitForTimeout(400);
+    const free = p.locator(".pin.free").first();
+    const fBefore = await free.boundingBox();
+    await p.mouse.move(fBefore.x + fBefore.width / 2, fBefore.y + fBefore.height / 2);
+    await p.mouse.down();
+    await p.mouse.move(fBefore.x + fBefore.width / 2 - 40, fBefore.y + 110, { steps: 8 });
+    await p.mouse.up();
+    await p.waitForTimeout(250);
+    const fAfter = await p.locator(".pin.free").first().boundingBox();
+    check(Math.abs(fAfter.y - fBefore.y - 110) < 30, `dragging moves a free marker (${Math.round(fAfter.y - fBefore.y)}px)`);
+    check(!(await p.$(".mws")), "dragging doesn't open the workspace");
+    await p.locator(".pin.free").first().click();
+    await p.waitForSelector(".mws");
+    await p.click("[data-tab='related']");
+    const sameNote = await p.$$eval("#rSel optgroup", gs => { const g = gs.find(x => x.label !== "Suggested"); return g ? [...g.querySelectorAll("option")].map(o => o.value) : []; });
+    const choices = await p.$$eval("#rSel option", os => os.map(o => o.value).filter(Boolean));
+    await p.selectOption("#rSel", (sameNote[0] || choices[0]));
+    await p.click("#rLink");
+    await p.waitForTimeout(250);
+    check((await p.$$("#strings .string")).length >= 1, "linked markers are joined by a string");
+    const wsBox = await p.locator(".mws").boundingBox();
+    check(wsBox.width < 1400 * 0.4, `workspace leaves the note visible (${Math.round(wsBox.width)}px wide)`);
+    await p.screenshot({ path: `${OUT}/12-strings.png` });
+    await p.keyboard.press("Escape");
+    await p.click("#backBtn");
+    await p.waitForSelector("#dial");
+
     // settings open and close
     await p.click("#settingsBtn");
     await p.waitForSelector(".sheet");

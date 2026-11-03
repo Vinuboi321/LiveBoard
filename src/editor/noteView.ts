@@ -6,8 +6,8 @@ import Highlight from "@tiptap/extension-highlight";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
-import { closeBox, openBox, setOpenNote, takePendingOpen, TYPE_INFO } from "./markerBox";
-import { pinIds, setEditor } from "./ops";
+import { closeBox, openBox, setOpenNote, setPendingOpen, takePendingOpen, TYPE_INFO } from "./markerBox";
+import { dropFreeMarker, moveFreeMarker, pinIds, setEditor } from "./ops";
 import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
 import type { Note } from "../types";
 import { $, armButton, debounce, esc, toast } from "../util";
@@ -61,14 +61,15 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
           <input id="newCourse" placeholder="Course name" hidden maxlength="32"></label>
         <span class="mcount" id="mcount"></span>
         <span class="spacer"></span>
+        <button class="tbtn drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page">+ Marker</button>
         <button class="tbtn ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Show classic formatting tools">Aa</button>
         <button class="tbtn" id="delNote">Delete</button>
       </div>
       <div class="toolbar" id="toolbar" ${state.meta.showTools ? "" : "hidden"}>${TOOLS.map((t, i) => `<button data-i="${i}" title="${t[1]}" aria-label="${t[1]}">${esc(t[0])}</button>`).join("")}</div>
       <input class="ptitle" id="ptitle" value="${esc(n.title)}" aria-label="Title" maxlength="140" placeholder="Untitled note">
       ${backlinks.length ? `<div class="backlinks">Linked from ${backlinks.map(m => { const src = note(m.noteId); return src ? `<button data-open="${src.id}">${esc(src.title)}</button>` : ""; }).join("")}</div>` : ""}
-      <div class="hint" id="hint">Select any text to place a marker. On an empty line, tap <b class="plus">+</b> to write or generate with one.</div>
-      <div class="editorwrap"><div id="editor"></div><div class="rail" id="rail" aria-label="Markers on this page"></div></div>
+      <div class="hint" id="hint">Select text to mark it, or drop a marker anywhere: tap <b>+ Marker</b>, double-click a margin, or press and hold on the page. Drag a free marker to move it.</div>
+      <div class="editorwrap" id="ewrap"><svg class="strings" id="strings" aria-hidden="true"></svg><div id="editor"></div><div class="stringtags" id="stringTags"></div><div class="rail" id="rail" aria-label="Markers on this page"></div></div>
       <button class="tapzone" id="tapzone" aria-label="Add a line at the end">Tap here to keep writing</button>
     </article>`;
 
@@ -221,12 +222,89 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     openBox(m.id);
   };
 
+  /* ----- free markers: drop anywhere, drag to move ----- */
+  const paperEl = $("#paper", stage)!, wrapEl = $("#ewrap", stage)!, dropBtn = $("#dropBtn", stage)!;
+  let dropMode = false;
+  const setDrop = (on: boolean) => { dropMode = on; dropBtn.setAttribute("aria-pressed", String(on)); dropBtn.classList.toggle("on", on); paperEl.classList.toggle("dropping", on); };
+  dropBtn.onclick = e => { e.stopPropagation(); setDrop(!dropMode); if (dropMode) toast("Tap anywhere on the page to drop a marker."); };
+  const dropAt = (x: number, y: number) => {
+    if (!ed) return;
+    const m = newMarker(id, "", "note");
+    state.markers.set(m.id, m);
+    putMarker(m);
+    if (!dropFreeMarker(m.id, x, y)) { toast("Couldn't place a marker there."); return; }
+    repaintAll();
+    setDrop(false);
+    setTimeout(() => openBox(m.id), 30);
+  };
+  const inPaper = (x: number, y: number) => { const r = paperEl.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; };
+  paperEl.addEventListener("click", e => {
+    if (!dropMode || (e.target as Element).closest("#dropBtn,.pin,.ptop,.toolbar,input,select,.backlinks")) return;
+    e.preventDefault(); e.stopPropagation();
+    dropAt(e.clientX, e.clientY);
+  }, true);
+  // double-click in the page margins (not on text) drops a marker there
+  paperEl.addEventListener("dblclick", e => {
+    const t = e.target as Element;
+    if (t.closest(".ProseMirror p, .ProseMirror li, .ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror blockquote, .ptop, .toolbar, input, button, .mout")) return;
+    if (!t.closest(".editorwrap, .paper")) return;
+    e.preventDefault();
+    dropAt(e.clientX, e.clientY);
+  });
+  // press and hold (mouse or pen) anywhere on the page
+  let holdTimer: number | undefined, holdStart: { x: number; y: number } | null = null;
+  wrapEl.addEventListener("pointerdown", e => {
+    if (e.pointerType === "touch" || e.button !== 0 || (e.target as Element).closest(".pin, .mout, .rail, .stringtag")) return;
+    holdStart = { x: e.clientX, y: e.clientY };
+    clearTimeout(holdTimer);
+    holdTimer = window.setTimeout(() => { if (holdStart) { getSelection()?.removeAllRanges(); dropAt(holdStart.x, holdStart.y); holdStart = null; } }, 650);
+  });
+  const cancelHold = (e: PointerEvent) => { if (holdStart && (e.type !== "pointermove" || Math.hypot(e.clientX - holdStart.x, e.clientY - holdStart.y) > 6)) { clearTimeout(holdTimer); holdStart = null; } };
+  wrapEl.addEventListener("pointermove", cancelHold);
+  wrapEl.addEventListener("pointerup", cancelHold);
+  wrapEl.addEventListener("pointercancel", cancelHold);
+  const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && dropMode) setDrop(false); };
+  document.addEventListener("keydown", onKey);
+  cleanup.push(() => document.removeEventListener("keydown", onKey));
+
+  // drag a free marker to move it
+  let drag: { id: string; el: HTMLElement; sx: number; sy: number; moved: boolean; pid: number } | null = null;
+  wrapEl.addEventListener("pointerdown", e => {
+    const el = (e.target as Element).closest<HTMLElement>(".pin.free");
+    if (!el?.dataset.pin) return;
+    e.preventDefault();
+    clearTimeout(holdTimer); holdStart = null;
+    drag = { id: el.dataset.pin, el, sx: e.clientX, sy: e.clientY, moved: false, pid: e.pointerId };
+    el.setPointerCapture(e.pointerId);
+  });
+  wrapEl.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true;
+    drag.el.classList.add("dragging");
+    drag.el.style.translate = `${dx}px ${dy}px`;
+    layoutStrings();
+  });
+  const endDrag = (e: PointerEvent) => {
+    if (!drag || e.pointerId !== drag.pid) return;
+    const d = drag;
+    drag = null;
+    d.el.classList.remove("dragging");
+    d.el.style.translate = "";
+    if (!d.moved) { openBox(d.id, d.el); return; }
+    if (inPaper(e.clientX, e.clientY)) moveFreeMarker(d.id, e.clientX, e.clientY);
+    setTimeout(layoutRail, 30);
+  };
+  wrapEl.addEventListener("pointerup", endDrag);
+  wrapEl.addEventListener("pointercancel", endDrag);
+
   /* ----- opening markers from the page ----- */
   const edEl = $("#editor", stage)!;
   edEl.addEventListener("click", e => {
     const t = e.target as HTMLElement;
     const pinEl = t.closest<HTMLElement>(".pin");
-    if (pinEl?.dataset.pin) { e.preventDefault(); openBox(pinEl.dataset.pin, pinEl); return; }
+    if (pinEl?.dataset.pin) { e.preventDefault(); if (!pinEl.classList.contains("free")) openBox(pinEl.dataset.pin, pinEl); return; }
     const mk = t.closest<HTMLElement>(".mk");
     if (mk?.dataset.marker && ed?.state.selection.empty) openBox(mk.dataset.marker, mk);
   });
@@ -250,11 +328,82 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       lastY = y;
       return `<button class="rdot" data-id="${m.id}" data-type="${m.type}" data-mastery="${m.mastery}" style="top:${y}px" title="${esc(TYPE_INFO[m.type].label)}${m.text ? ": " + esc(m.text.slice(0, 60)) : ""}" aria-label="Open ${esc(TYPE_INFO[m.type].label)} marker"></button>`;
     }).join("");
+    layoutStrings();
     const ms = markersOf(id);
     const mastered = ms.filter(m => m.mastery === 2).length;
     const mc = $("#mcount");
     if (mc) mc.textContent = ms.length ? `${ms.length} marker${ms.length > 1 ? "s" : ""} · ${mastered} mastered` : "";
   }
+  /* ----- strings: a thin thread between connected markers ----- */
+  function layoutStrings() {
+    const svg = $("#strings") as SVGSVGElement | null, tags = $("#stringTags");
+    const wrap = $("#ewrap");
+    if (!svg || !tags || !wrap) return;
+    const wr = wrap.getBoundingClientRect();
+    document.querySelectorAll<HTMLElement>("#editor .pin.free:not(.dragging)").forEach(el => {
+      el.style.marginLeft = "";
+      const r = el.getBoundingClientRect();
+      const over = r.right - (wr.right + 14), under = (wr.left - 30) - r.left;
+      if (over > 0) el.style.marginLeft = `${-over}px`;
+      else if (under > 0) el.style.marginLeft = `${under}px`;
+    });
+    svg.setAttribute("width", String(wr.width));
+    svg.setAttribute("height", String(wr.height));
+    const center = (el: HTMLElement) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2 - wr.left, y: r.top + r.height / 2 - wr.top }; };
+    const dots = new Map<string, HTMLElement>();
+    document.querySelectorAll<HTMLElement>("#editor .pin[data-pin]").forEach(el => dots.set(el.dataset.pin!, el));
+    const seen = new Set<string>();
+    let paths = "", tagHtml = "", gi = 0;
+    const color = (t: string) => getComputedStyle(document.documentElement).getPropertyValue(`--t-${t}`).trim() || "#8338EC";
+    for (const [mid, el] of dots) {
+      const m = state.markers.get(mid);
+      if (!m) continue;
+      const a = center(el);
+      for (const oid of m.links || []) {
+        const key = [mid, oid].sort().join("|");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const other = state.markers.get(oid);
+        if (!other || other.deleted) continue;
+        const oel = dots.get(oid);
+        if (oel) {
+          const b = center(oel);
+          const dist = Math.hypot(b.x - a.x, b.y - a.y);
+          const sag = Math.min(90, 18 + dist * 0.22);
+          const cx = (a.x + b.x) / 2, cy = Math.max(a.y, b.y) + sag;
+          const d = `M${a.x.toFixed(1)} ${a.y.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+          const g = `sg${gi++}`;
+          paths += `<defs><linearGradient id="${g}" gradientUnits="userSpaceOnUse" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"><stop offset="0" stop-color="${color(m.type)}"/><stop offset="1" stop-color="${color(other.type)}"/></linearGradient></defs>
+            <g class="string" data-a="${mid}" data-b="${oid}"><path class="sline" d="${d}" stroke="url(#${g})"/><path class="sglow" d="${d}" stroke="url(#${g})"/>
+            <circle class="sbead" r="2.6" fill="url(#${g})"><animateMotion dur="${(2.4 + dist / 260).toFixed(2)}s" repeatCount="indefinite" path="${d}"/></circle></g>`;
+        } else if (note(other.noteId) && !note(other.noteId)!.deleted) {
+          // the other end lives in another note: a short dangling thread ending in a tag
+          const left = a.x > wr.width * 0.55; // near the right edge, the thread swings down and to the left
+          const ex = left ? a.x - 64 : a.x + 64, ey = a.y + 30 + (gi % 3) * 22;
+          gi++;
+          const d = `M${a.x.toFixed(1)} ${a.y.toFixed(1)} Q${((a.x + ex) / 2).toFixed(1)} ${(ey + 16).toFixed(1)} ${ex.toFixed(1)} ${ey.toFixed(1)}`;
+          paths += `<g class="string out" data-a="${mid}"><path class="sline" d="${d}" stroke="${color(m.type)}"/></g>`;
+          tagHtml += `<button class="stringtag ${left ? "toleft" : ""}" data-open-marker="${oid}" data-type="${other.type}" style="left:${ex}px;top:${ey}px" title="Linked to a point in ${esc(note(other.noteId)!.title)}">↗ ${esc(note(other.noteId)!.title.slice(0, 28))}</button>`;
+        }
+      }
+    }
+    svg.innerHTML = paths;
+    tags.innerHTML = tagHtml;
+  }
+  $("#stringTags", stage)!.addEventListener("click", e => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-open-marker]");
+    const other = b ? state.markers.get(b.dataset.openMarker!) : null;
+    if (!other) return;
+    setPendingOpen(other.id);
+    openNote(other.noteId);
+  });
+  // light up a marker's strings while you hover it
+  $("#ewrap", stage)!.addEventListener("pointerover", e => {
+    const el = (e.target as Element).closest<HTMLElement>(".pin[data-pin]");
+    document.querySelectorAll(".string.lit").forEach(g => g.classList.remove("lit"));
+    if (el) document.querySelectorAll(`.string[data-a="${CSS.escape(el.dataset.pin!)}"], .string[data-b="${CSS.escape(el.dataset.pin!)}"]`).forEach(g => g.classList.add("lit"));
+  });
+
   $("#rail", stage)!.addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>(".rdot");
     if (!b) return;
