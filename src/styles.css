@@ -259,16 +259,17 @@ button:disabled { cursor: default; opacity: .6; }
 .mws.dragging { box-shadow: 0 40px 100px rgba(10, 20, 35, .36); transition: none; }
 @keyframes cardin { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: none; } }
 @keyframes cardout { to { opacity: 0; transform: scale(.9); } }
-.wsgrab { display: none; }
-@media (min-width: 900px) { .mws .wshead { cursor: grab; } .mws.dragging .wshead { cursor: grabbing; } }
-@media (max-width: 899px) {
-  body.ws-open .stage { padding-bottom: 60vh; }
-  .mws { border-radius: 24px; transition: top .25s ease-out, height .25s ease-out; }
-  .wsgrab { display: grid; place-items: center; border: 0; background: none; height: 22px; padding: 0; flex: 0 0 auto; }
-  .wsgrab i { width: 44px; height: 5px; border-radius: 99px; background: var(--line); }
-  .mws .wshead { padding-top: 2px; }
-  .mws:not(.tall) .wschips, .mws:not(.tall) .wsmeta { display: none; }
-  .mws:not(.tall) .wsanchor blockquote { font-size: 16px; max-height: 3em; }
+/* Grab bar: drag to move the card (all sizes) */
+.wsgrab { display: grid; place-items: center; border: 0; background: none; height: 18px; padding: 0; flex: 0 0 auto; cursor: grab; touch-action: none; }
+.wsgrab i { width: 40px; height: 5px; border-radius: 99px; background: var(--line); transition: background .15s; }
+.wsgrab:hover i, .mws.dragging .wsgrab i { background: var(--tc); }
+.mws .wshead { cursor: grab; touch-action: none; padding-top: 2px; }
+.mws.dragging, .mws.dragging .wshead, .mws.dragging .wsgrab { cursor: grabbing; user-select: none; }
+@media (max-width: 640px) {
+  .mws { border-radius: 22px; }
+  .mws .wschips, .mws .wsmeta { display: none; }
+  .mws .wsanchor blockquote { font-size: 16px; max-height: 4.2em; }
+  .mws .wstabs button { padding: 11px 8px 9px; font-size: 14px; }
 }
 @keyframes up { from { transform: translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 .wshead { display: flex; align-items: center; gap: 8px; padding: 16px 16px 4px 20px; }

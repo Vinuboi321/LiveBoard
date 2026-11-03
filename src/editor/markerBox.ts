@@ -66,81 +66,86 @@ export function openBox(id: string, anchorEl?: Element | null, startTab?: Tab) {
   document.body.appendChild(ws);
   document.body.classList.add("ws-open");
   render();
-  placeCard(anchorEl || pinEl(id));
   revealPin(id);
+  placeCard(anchorEl && anchorEl.isConnected ? anchorEl : pinEl(id));
   // on phones, focusing a field would pop the keyboard over the note; let the student tap in when ready
-  if (innerWidth >= 900) setTimeout(() => (ws?.querySelector<HTMLElement>("[data-autofocus]"))?.focus({ preventScroll: true }), 40);
+  if (matchMedia("(pointer: fine)").matches) setTimeout(() => (ws?.querySelector<HTMLElement>("[data-autofocus]"))?.focus({ preventScroll: true }), 40);
 }
 
 /* ---------- the card: opens out of its marker, floats over the page, can be dragged by its header ---------- */
 const pinEl = (id: string) => document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(id)}"]`);
 let moved = false; // the student dragged the card; keep it where they put it
 
+/** Open as a compact card right next to the marker that was tapped: beside it if there's room, otherwise just below
+    or above it. Same behavior at every screen size; never a sheet glued to an edge. */
 function placeCard(anchor: Element | null) {
   if (!ws) return;
-  const vw = innerWidth, vh = innerHeight, top0 = 68;
-  const a = anchor?.getBoundingClientRect();
-  let W: number, H: number, left: number, top: number;
-  if (vw < 900) {
-    W = vw - 24;
-    H = Math.round(vh * (ws.classList.contains("tall") ? 0.86 : 0.58));
-    left = 12;
-    top = vh - H - 12;
-  } else {
-    W = Math.min(540, vw - 48);
-    H = Math.min(680, vh - top0 - 28);
-    if (a) {
-      // beside the marker when there's room, otherwise over the page, never glued to an edge
-      left = a.right + 28 + W <= vw - 24 ? a.right + 28 : a.left - 28 - W >= 24 ? a.left - 28 - W : (vw - W) / 2;
-      top = Math.min(Math.max(a.top - 140, top0 + 8), vh - H - 20);
-    } else { left = (vw - W) / 2; top = top0 + 12; }
+  const vw = innerWidth, vh = innerHeight, top0 = 64, gap = 14, edge = 12;
+  const W = Math.min(440, vw - edge * 2);
+  let H = Math.min(560, vh - top0 - edge * 2);
+  let left: number, top: number;
+  let a = anchor?.getBoundingClientRect();
+  if (a && W > vw - 2 * edge - 60) {
+    // narrow screen: the card goes below or above the marker; make room by scrolling the marker up if needed
+    const below = vh - a.bottom - gap - edge, above = a.top - gap - top0;
+    if (below < 300 && above < 300) {
+      document.getElementById("stage")?.scrollBy({ top: a.top - (top0 + 70) });
+      a = anchor!.getBoundingClientRect();
+    }
   }
+  if (!a) { left = (vw - W) / 2; top = top0 + 16; }
+  else {
+    const cx = a.left + a.width / 2;
+    if (a.right + gap + W <= vw - edge) { left = a.right + gap; top = a.top - 56; }
+    else if (a.left - gap - W >= edge) { left = a.left - gap - W; top = a.top - 56; }
+    else {
+      left = cx - W / 2;
+      const below = vh - a.bottom - gap - edge, above = a.top - gap - top0;
+      if (below >= Math.min(H, 360) || below >= above) { top = a.bottom + gap; H = Math.min(H, below); }
+      else { H = Math.min(H, above); top = a.top - gap - H; }
+    }
+    left = Math.min(Math.max(left, edge), vw - W - edge);
+    top = Math.min(Math.max(top, top0), vh - H - edge);
+  }
+  H = Math.max(260, H);
   Object.assign(ws.style, { left: `${Math.round(left)}px`, top: `${Math.round(top)}px`, width: `${Math.round(W)}px`, height: `${Math.round(H)}px` });
   if (a) ws.style.transformOrigin = `${Math.round(a.left + a.width / 2 - left)}px ${Math.round(a.top + a.height / 2 - top)}px`;
 }
 function clampCard() {
   if (!ws) return;
   const r = ws.getBoundingClientRect();
-  const left = Math.min(Math.max(r.left, 8), innerWidth - r.width - 8), top = Math.min(Math.max(r.top, 60), innerHeight - Math.min(r.height, innerHeight - 70) - 8);
-  ws.style.left = `${left}px`;
-  ws.style.top = `${top}px`;
+  ws.style.left = `${Math.min(Math.max(r.left, 8), innerWidth - r.width - 8)}px`;
+  ws.style.top = `${Math.min(Math.max(r.top, 56), innerHeight - 80)}px`;
 }
 addEventListener("resize", () => { if (!ws || !current) return; if (moved) clampCard(); else placeCard(pinEl(current.id)); });
 
+/** Drag the card by its grab bar or header, with mouse, pen or touch. */
 function bindDrag() {
-  if (!ws || innerWidth < 900) return;
-  const head = ws.querySelector<HTMLElement>(".wshead");
-  if (!head) return;
-  head.onpointerdown = e => {
-    if ((e.target as Element).closest("button") || !ws) return;
-    const r = ws.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
-    head.setPointerCapture(e.pointerId);
-    ws.classList.add("dragging");
-    head.onpointermove = ev => {
-      if (!ws) return;
-      moved = true;
-      ws.style.left = `${Math.min(Math.max(r.left + ev.clientX - sx, 8), innerWidth - r.width - 8)}px`;
-      ws.style.top = `${Math.min(Math.max(r.top + ev.clientY - sy, 60), innerHeight - 80)}px`;
+  if (!ws) return;
+  ws.querySelectorAll<HTMLElement>(".wsgrab, .wshead").forEach(h => {
+    h.onpointerdown = e => {
+      if (!ws || (e.target as Element).closest("button:not(.wsgrab)")) return;
+      e.preventDefault();
+      const r = ws.getBoundingClientRect(), sx = e.clientX, sy = e.clientY;
+      h.setPointerCapture(e.pointerId);
+      ws.classList.add("dragging");
+      h.onpointermove = ev => {
+        if (!ws) return;
+        moved = true;
+        ws.style.left = `${Math.min(Math.max(r.left + ev.clientX - sx, 8 - r.width * 0.5), innerWidth - r.width * 0.5)}px`;
+        ws.style.top = `${Math.min(Math.max(r.top + ev.clientY - sy, 56), innerHeight - 60)}px`;
+      };
+      h.onpointerup = h.onpointercancel = () => { h.onpointermove = null; ws?.classList.remove("dragging"); };
     };
-    head.onpointerup = head.onpointercancel = () => { head.onpointermove = null; ws?.classList.remove("dragging"); };
-  };
+  });
 }
 
-/** Keep the marker visible beside or above the workspace instead of hidden behind it. */
+/** The card is placed beside the marker, so only make sure the marker itself is on screen. */
 function revealPin(id: string) {
-  const el = document.querySelector<HTMLElement>(`#editor .pin[data-pin="${CSS.escape(id)}"]`), stage = document.getElementById("stage");
-  if (!el || !stage || !ws) return;
-  requestAnimationFrame(() => {
-    if (!ws) return;
-    const r = el.getBoundingClientRect(), w = ws.getBoundingClientRect();
-    if (innerWidth < 900) {
-      const room = w.top - 70; // visible space above the sheet
-      const want = 70 + Math.max(40, room * 0.4);
-      if (r.top < 70 || r.bottom > w.top - 10) stage.scrollBy({ top: r.top - want, behavior: "smooth" });
-    } else if (r.right > w.left - 8 && r.left > w.left - 40) {
-      el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-    }
-  });
+  const el = pinEl(id);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  if (r.top < 60 || r.bottom > innerHeight - 20) el.scrollIntoView({ block: "center" });
 }
 const isFree = (id: string) => !!document.querySelector(`#editor .pin.free[data-pin="${CSS.escape(id)}"]`);
 
@@ -173,7 +178,7 @@ function render() {
   const linkCount = (m.links || []).length + (m.linkNoteId ? 1 : 0);
   ws.dataset.type = m.type;
   ws.innerHTML = `
-    <button class="wsgrab" id="mGrab" aria-label="${ws.classList.contains("tall") ? "Shrink" : "Expand"} marker workspace"><i></i></button>
+    <button class="wsgrab" id="mGrab" aria-label="Drag to move" title="Drag to move"><i></i></button>
     <div class="wshead">
       <span class="eyebrow"><i class="tdot"></i>Marker workspace · ${TYPE_INFO[m.type].label}</span>
       <button class="mx" id="mClose" aria-label="Close marker">×</button>
@@ -201,7 +206,6 @@ function render() {
 function bindCommon() {
   if (!ws || !current) return;
   $("#mClose", ws)!.onclick = closeBox;
-  $("#mGrab", ws)!.onclick = () => { ws!.classList.toggle("tall"); render(); placeCard(current ? pinEl(current.id) : null); };
   bindDrag();
   ws.querySelectorAll<HTMLButtonElement>(".wstabs button").forEach(b => b.onclick = () => { saveDraft.flush(); tab = b.dataset.tab as Tab; render(); });
   ws.querySelector<HTMLElement>(".wstabs")!.onkeydown = e => {
@@ -569,7 +573,7 @@ async function run(said: string) {
 }
 
 document.addEventListener("pointerdown", e => {
-  if (!ws || innerWidth >= 900) return; // docked on wide screens; a tap outside closes the sheet on phones
+  if (!ws || moved) return; // a card the student has dragged into place stays until closed
   const t = e.target as Element;
   if (ws.contains(t) || t.closest(".pin, .mk, .rail, .mout, .floatbtn")) return;
   closeBox();
