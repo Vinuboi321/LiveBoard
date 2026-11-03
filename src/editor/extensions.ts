@@ -98,7 +98,8 @@ export const MarkerOutput = Node.create({
   addAttributes() {
     return {
       marker: { default: null, parseHTML: el => el.getAttribute("data-marker-output"), renderHTML: a => ({ "data-marker-output": a.marker }) },
-      status: { default: "pending", parseHTML: el => el.getAttribute("data-status") || "pending", renderHTML: a => ({ "data-status": a.status }) }
+      status: { default: "pending", parseHTML: el => el.getAttribute("data-status") || "pending", renderHTML: a => ({ "data-status": a.status }) },
+      oid: { default: null, parseHTML: el => el.getAttribute("data-oid"), renderHTML: a => (a.oid ? { "data-oid": a.oid } : {}) }
     };
   },
   parseHTML() { return [{ tag: "div[data-marker-output]" }]; },
@@ -117,17 +118,24 @@ export const MarkerOutput = Node.create({
       const render = () => {
         dom.dataset.status = cur.attrs.status;
         dom.dataset.markerOutput = cur.attrs.marker;
+        if (cur.attrs.oid) dom.dataset.oid = cur.attrs.oid;
         const m = state.markers.get(cur.attrs.marker);
         dom.dataset.type = m?.type || "explain";
+        const revs = (m?.outputs?.[cur.attrs.oid] || []).length;
         bar.innerHTML = cur.attrs.status === "pending"
-          ? `<span class="moutlabel"><i></i>Written by a marker</span><button type="button" data-act="keep">Keep</button><button type="button" data-act="undo">Remove</button>`
-          : "";
+          ? `<button type="button" class="moutlabel" data-act="open" title="Open the marker that wrote this"><i></i>Written by a marker ↗</button><button type="button" data-act="keep">Keep</button><button type="button" data-act="undo">Remove</button>`
+          : `<button type="button" class="moutsrc" data-act="open" title="Open the marker that wrote this${revs > 1 ? ` · ${revs} versions` : ""}"><i></i>${revs > 1 ? `${revs} versions · ` : ""}marker ↗</button>`;
+        dom.classList.toggle("kept", cur.attrs.status !== "pending");
       };
       bar.addEventListener("mousedown", e => e.preventDefault());
       bar.addEventListener("click", e => {
         const act = (e.target as HTMLElement).closest("button")?.dataset.act;
         const pos = typeof getPos === "function" ? getPos() : null;
         if (!act || pos == null) return;
+        if (act === "open") {
+          dom.dispatchEvent(new CustomEvent("open-marker", { bubbles: true, detail: { id: cur.attrs.marker, oid: cur.attrs.oid } }));
+          return;
+        }
         editor.chain().command(({ tr }) => {
           if (act === "keep") tr.setNodeMarkup(pos, undefined, { ...cur.attrs, status: "accepted" });
           else tr.delete(pos, pos + cur.nodeSize);

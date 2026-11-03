@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/core";
 import { mdToNoteHtml } from "../md";
-import { esc } from "../util";
+import { esc, uid } from "../util";
+import { DOMSerializer } from "@tiptap/pm/model";
 
 /* Editor operations the marker box performs. One editor is open at a time. */
 let ed: Editor | null = null;
@@ -54,7 +55,7 @@ export function insertOutput(id: string, markdown: string, extra: { mermaid?: st
   if (extra.calcLine) html += `<p><strong>${esc(extra.calcLine)}</strong></p>`;
   if (extra.mermaid) html += `<div data-diagram="" data-code="${esc(extra.mermaid)}"></div>`;
   if (!html) return false;
-  ed.chain().insertContentAt(insertAt, `<div data-marker-output="${esc(id)}" data-status="${extra.status || "pending"}">${html}</div>`).run();
+  ed.chain().insertContentAt(insertAt, `<div data-marker-output="${esc(id)}" data-oid="${uid()}" data-status="${extra.status || "pending"}">${html}</div>`).run();
   return true;
 }
 
@@ -140,6 +141,45 @@ export function moveFreeMarker(id: string, x: number, y: number) {
     ed.chain().command(({ tr }) => { tr.setNodeMarkup(p, undefined, { id, dx, dy }); return true; }).run();
   }
   return true;
+}
+
+/** Every block a marker wrote, with its current content (used to keep revision history). */
+export function outputsInDoc() {
+  const out: { pos: number; marker: string; oid: string | null; text: string; html: string }[] = [];
+  if (!ed) return out;
+  const ser = DOMSerializer.fromSchema(ed.schema);
+  ed.state.doc.descendants((n, pos) => {
+    if (n.type.name !== "markerOutput") return true;
+    const box = document.createElement("div");
+    box.appendChild(ser.serializeFragment(n.content));
+    out.push({ pos, marker: n.attrs.marker, oid: n.attrs.oid, text: n.textContent.trim(), html: box.innerHTML });
+    return false;
+  });
+  return out;
+}
+export function giveOutputIds() {
+  if (!ed) return;
+  const missing = outputsInDoc().filter(o => !o.oid);
+  if (!missing.length) return;
+  ed.chain().command(({ tr }) => {
+    missing.forEach(o => { const n = tr.doc.nodeAt(o.pos); if (n) tr.setNodeMarkup(o.pos, undefined, { ...n.attrs, oid: uid() }); });
+    tr.setMeta("addToHistory", false);
+    return true;
+  }).run();
+}
+export function restoreOutput(oid: string, html: string) {
+  if (!ed) return false;
+  const o = outputsInDoc().find(x => x.oid === oid);
+  if (!o) return false;
+  const n = ed.state.doc.nodeAt(o.pos)!;
+  ed.chain().insertContentAt({ from: o.pos + 1, to: o.pos + n.nodeSize - 1 }, html).run();
+  return true;
+}
+export function scrollToOutput(oid: string) {
+  const el = document.querySelector<HTMLElement>(`#editor .mout[data-oid="${CSS.escape(oid)}"]`);
+  el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  el?.classList.add("flash");
+  setTimeout(() => el?.classList.remove("flash"), 1200);
 }
 
 export function pinIds(): Set<string> {

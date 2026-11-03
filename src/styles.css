@@ -305,6 +305,8 @@ button:disabled { cursor: default; opacity: .6; }
 .tchips { display: flex; flex-wrap: wrap; gap: 8px; }
 .tchips button { border: 1.5px solid var(--line); background: none; border-radius: 99px; padding: 6px 13px; font-size: 13.5px; color: var(--ink); }
 .tchips button:hover { border-color: var(--tc); }
+.tchips.compact button { padding: 4px 10px; font-size: 12.5px; }
+.card.guide { margin-top: 4px; }
 .wsrow { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
 .wsrow input { flex: 1; }
 .btn1 { border: 0; background: var(--tc); color: #fff; border-radius: 14px; padding: 11px 18px; font: 700 15px var(--display); box-shadow: 0 8px 18px color-mix(in srgb, var(--tc) 35%, transparent); align-self: flex-start; white-space: nowrap; }
@@ -416,6 +418,51 @@ details.src mark { background: color-mix(in srgb, var(--tc) 25%, transparent); c
 .stringtag:hover { border-color: var(--tc); }
 .stringtag { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
+
+
+/* Traceable marker writing */
+.moutsrc { position: absolute; top: 6px; right: 8px; display: flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: var(--paper); border-radius: 99px; padding: 1px 8px; font: 11px var(--mono); color: var(--muted); opacity: 0; transition: opacity .15s; cursor: pointer; }
+.moutsrc i, .moutlabel i { width: 7px; height: 7px; border-radius: 50%; background: var(--tc, var(--t-explain)); }
+.mout.kept:hover .moutsrc, .mout.kept:focus-within .moutsrc { opacity: 1; }
+.mout.kept .moutbar { position: static; margin: 0; height: 0; }
+button.moutlabel { border: 0; background: none; padding: 0; font: 11px var(--mono); color: var(--muted); cursor: pointer; }
+button.moutlabel:hover, .moutsrc:hover { color: var(--tc, var(--ink)); }
+.mout.flash { box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc, var(--t-explain)) 45%, transparent); transition: box-shadow .3s; }
+@media (hover: none) { .mout.kept .moutsrc { opacity: .85; } }
+.written { display: flex; flex-direction: column; gap: 8px; }
+.wout { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; }
+.wjump { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 0; }
+.wjump b { display: block; font: 14px/1.4 var(--serif); font-weight: 500; }
+.wjump small, .wrev small { font: 11px var(--mono); color: var(--muted); display: block; }
+.wrevs summary { cursor: pointer; font-size: 13px; color: var(--muted); margin-top: 6px; }
+.wrev { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; padding: 6px 0; border-top: 1px dashed var(--line); font: 13px/1.4 var(--serif); }
+.btn2.small { padding: 4px 10px; font-size: 12.5px; border-radius: 10px; }
+
+
+/* Search */
+.searchbtn { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--paper); border-radius: 99px; padding: 6px 8px 6px 12px; color: var(--muted); font-size: 13.5px; }
+.searchbtn svg { width: 16px; height: 16px; }
+.searchbtn kbd, .qrow kbd { font: 11px var(--mono); border: 1px solid var(--line); border-radius: 6px; padding: 1px 5px; color: var(--muted); }
+.searchbtn:hover { color: var(--ink); border-color: var(--cobalt); }
+@media (max-width: 640px) { .searchbtn span, .searchbtn kbd { display: none; } .searchbtn { padding: 8px; } }
+.searchwrap { position: fixed; inset: 0; z-index: 960; background: rgba(15, 10, 40, .28); display: flex; justify-content: center; align-items: flex-start; padding: calc(70px + env(safe-area-inset-top, 0px)) 12px 12px; }
+.searchbox { width: min(640px, 100%); max-height: min(70vh, 640px); display: flex; flex-direction: column; background: var(--paper); border: 1px solid var(--line); border-radius: 20px; box-shadow: 0 30px 80px rgba(10, 20, 35, .3); overflow: hidden; animation: cardin .2s ease-out; }
+.qrow { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 18px; color: var(--muted); }
+.qrow input { flex: 1; min-width: 0; border: 0; background: none; font: 17px var(--display); color: var(--ink); outline: none; }
+.qres { overflow: auto; padding: 6px; }
+.qhead { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); padding: 10px 10px 4px; }
+.qempty { color: var(--muted); padding: 14px 12px; margin: 0; }
+.qrow2 { display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left; border: 0; background: none; border-radius: 12px; padding: 10px 12px; }
+.qrow2.on, .qrow2:hover { background: color-mix(in srgb, var(--tc, var(--cobalt)) 9%, var(--paper)); }
+.qrow2 > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.qrow2 b { font: 500 15px/1.4 var(--serif); }
+.qrow2 em { font: 13px/1.45 var(--display); font-style: normal; color: var(--muted); }
+.qrow2 small { font: 11px var(--mono); color: var(--muted); }
+.qrow2 mark { background: color-mix(in srgb, var(--mark) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.qdot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; flex: 0 0 auto; }
+.qdot.marker { border: 2.5px solid var(--tc); }
+.qdot.marker[data-mastery="1"] { background: linear-gradient(90deg, var(--tc) 50%, transparent 50%); }
+.qdot.marker[data-mastery="2"] { background: var(--tc); }
 
 /* Spin controls and Follow a thought */
 .spinrow { display: flex; align-items: center; gap: 16px; justify-content: center; max-width: 100%; }

@@ -45,7 +45,10 @@ export async function openSettings(section?: string, onChanged?: () => void) {
 
   const name = $("#sName", panel) as HTMLInputElement;
   name.onchange = () => putMeta({ displayName: name.value.trim() });
-  $("#sOut", panel)?.addEventListener("click", async () => { await signOut(); toast("Signed out. Your notes stay on this device."); openSettings(); });
+  $("#sOut", panel)?.addEventListener("click", async () => {
+    try { await signOut(); toast("Signed out. Your notes were removed from this device and are safe in your account."); onChanged?.(); openSettings(); }
+    catch (err) { toast((err as Error).message, 5000); }
+  });
   ($("#sIn", panel) as HTMLFormElement | null)?.addEventListener("submit", async e => {
     e.preventDefault();
     const email = ($("#sEmail", panel!) as HTMLInputElement).value.trim();

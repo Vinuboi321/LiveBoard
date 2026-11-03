@@ -1,10 +1,10 @@
 import { aiHealth, askMarker, evaluate, localIntent, type LocalAction } from "../ai";
 import { mdToHtml } from "../md";
-import { courseName, liveMarkers, liveNotes, newNote, note, putMarker, state } from "../store";
+import { courseName, liveMarkers, liveNotes, newMarker, newNote, note, putMarker, putNote, state } from "../store";
 import type { Marker, MarkerType, Mastery, ThreadMsg } from "../types";
 import { $, agoLong, armButton, DAY, debounce, esc, toast } from "../util";
 import { repaintAll } from "./extensions";
-import { applyFormat, contextAround, insertOutput, removeMarkerFromDoc } from "./ops";
+import { applyFormat, contextAround, insertOutput, removeMarkerFromDoc, restoreOutput, scrollToOutput } from "./ops";
 
 /* The marker workspace: everything a marker can do, in one large panel anchored to its passage.
    Write · Ask · Expand · Calculate · Related · Recall. Ask also takes plain-word commands. */
@@ -13,7 +13,7 @@ export const TYPE_INFO: Record<MarkerType, { label: string; hint: string }> = {
   note: { label: "Writing", hint: "Your own words or drafted notes" },
   question: { label: "Question", hint: "Something you're unsure about" },
   explain: { label: "Explanation", hint: "Explained or expanded" },
-  math: { label: "Math", hint: "Calculated exactly" },
+  math: { label: "Math", hint: "Calculated by a math engine" },
   visual: { label: "Visual", hint: "A diagram" },
   link: { label: "Link", hint: "Connected to other points" },
   reminder: { label: "Reminder", hint: "Comes back for review" }
@@ -150,13 +150,16 @@ function revealPin(id: string) {
 const isFree = (id: string) => !!document.querySelector(`#editor .pin.free[data-pin="${CSS.escape(id)}"]`);
 
 /* ---------- shared bits ---------- */
-async function update(patch: Partial<Marker>, rerender = true) {
-  if (!current) return;
-  current = { ...current, ...patch };
-  await putMarker(current);
+/** Write to one specific marker, merged into its latest stored copy (never a stale snapshot). */
+async function updateMarker(id: string, patch: Partial<Marker>, rerender = true) {
+  const base = state.markers.get(id) || (current?.id === id ? current : null);
+  if (!base) return;
+  const next = { ...base, ...patch };
+  await putMarker(next);
   repaintAll();
-  if (rerender) render();
+  if (current?.id === id) { current = next; if (rerender) render(); }
 }
+const update = (patch: Partial<Marker>, rerender = true) => (current ? updateMarker(current.id, patch, rerender) : Promise.resolve());
 const msg = (role: ThreadMsg["role"], text: string, extra: Partial<ThreadMsg> = {}): ThreadMsg => ({ role, text, at: Date.now(), ...extra });
 
 function threadHTML(items: [ThreadMsg, number][]) {
@@ -233,14 +236,15 @@ function body(): string {
         <div class="tchips"><button data-tpl="outline">+ Outline</button><button data-tpl="check">+ Checklist</button><button data-tpl="example">+ Worked example</button><button data-tpl="def">+ Definition</button></div>
         <div class="wsrow"><button class="btn2" id="wKeep">Keep in marker</button><button class="btn1" id="wInsert">Insert into note ↗</button></div>
         <button class="textlink" id="wNew">↗ Turn this draft into a new note</button>
-        ${kept.length ? `<div class="wslabel">Kept in this marker</div>${threadHTML(kept.map(([t, i]) => [{ ...t, text: t.text.replace(/^✎\s*/, "") }, i]))}` : ""}`;
+        ${kept.length ? `<div class="wslabel">Kept in this marker</div>${threadHTML(kept.map(([t, i]) => [{ ...t, text: t.text.replace(/^✎\s*/, "") }, i]))}` : ""}
+        ${writtenHTML(m)}`;
     }
     case "ask": {
       const items = m.thread.map((t, i) => [t, i] as [ThreadMsg, number]).filter(([t]) => !(t.role === "self" && t.text.startsWith("✎")));
       const ctx = contextAround(m.id);
       return `${threadHTML(items)}
         ${aiOn === false ? `<div class="wsnote off">AI is not connected. Save a question and work through your own answer. Commands like "make this a list", "remind me Friday" or "link to …" still work.</div>` : ""}
-        ${!items.length ? `<div class="tchips sugg">${(m.text ? ["Explain this simpler", "Why does this work?", "Give me an example", "Quiz me on this", "Turn this into a list", "Draw a diagram"] : ["Outline this topic", "Summarize this note", "Make a checklist from this note"]).map(s => `<button data-q="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : ""}
+        <div class="tchips sugg ${items.length ? "compact" : ""}">${contextActions(m).map(s => `<button data-q="${esc(s)}">${esc(s)}</button>`).join("")}</div>
         <form id="aForm" class="askform">
           <textarea id="mIn" data-autofocus rows="3" maxlength="600" placeholder="${m.text ? "Ask about this point, or tell the marker what to do…" : "Draft, outline, summarize, calculate…"}" ${busy ? "disabled" : ""}></textarea>
           ${aiOn === false ? `<textarea id="aSelf" rows="3" placeholder="Your answer or reasoning (optional)…"></textarea><button class="btn1" id="aGo">Save question + answer</button>` : `<button class="btn1" id="aGo" ${busy ? "disabled" : ""}>Ask ↵</button>`}
@@ -259,7 +263,7 @@ function body(): string {
     case "calc": {
       const calcs = m.thread.map((t, i) => [t, i] as [ThreadMsg, number]).filter(([t]) => t.calc);
       const guess = (m.text.match(/-?[\d.]+\s*[-+*/^×÷]\s*-?[\d.]+(\s*[-+*/^×÷]\s*-?[\d.]+)*/) || [""])[0];
-      return `<h3>Work it out exactly.</h3><p class="sub">A math engine does the arithmetic, so the answer is exact. Units work too: <code>23.4 mL * 0.1 mol/L</code>, <code>5 kg to lb</code>.</p>
+      return `<h3>Work it out precisely.</h3><p class="sub">A math engine does the arithmetic with 64 significant digits, so the answer is computed, not guessed. Units work too: <code>23.4 mL * 0.1 mol/L</code>, <code>5 kg to lb</code>.</p>
         <form id="cForm" class="wsrow"><input id="cIn" data-autofocus class="code" value="${esc(guess)}" placeholder="e.g. e^0.5 * 0.5^4 / 4!" maxlength="300"><button class="btn1">Run</button></form>
         <div class="result" id="cOut">${lastCalc}</div>
         ${calcs.length ? `<div class="wslabel">Worked in this marker</div>${threadHTML(calcs)}` : ""}`;
@@ -279,6 +283,7 @@ function body(): string {
           ${[...groups].map(([t, xs]) => `<optgroup label="${esc(t)}">${xs.map(opt).join("")}</optgroup>`).join("")}</select>
         <button class="btn1" id="rLink">Link to this point</button>
         <p class="sub small">Suggestions use shared words in your notes.</p>
+        ${(m.links || []).length ? `<button class="card guide" id="rGuide"><span class="ic">✦</span><span><b>Build a study guide</b><small>Combine ${connectedMarkers(m).length} connected points into one note, with links back to each</small></span><span class="go">↗</span></button>` : ""}
         ${linked.length || ln ? `<div class="wslabel">Linked</div><div class="links">${linked.map(x => `<div class="lrow"><button class="lopen" data-m="${x.id}"><b>${esc(x.text.slice(0, 80))}</b><small>${esc(note(x.noteId)?.title || "")}</small></button><button class="lx" data-unlink="${x.id}" aria-label="Unlink">×</button></div>`).join("")}${ln ? `<div class="lrow"><button class="lopen" data-note="${ln.id}"><b>${esc(ln.title)}</b><small>Whole note</small></button><button class="lx" data-unlinknote aria-label="Unlink">×</button></div>` : ""}</div>` : ""}
         ${relatedNotesHTML(m)}`;
     }
@@ -286,6 +291,7 @@ function body(): string {
       const q = m.recallQ || (m.text ? `What does this mean, in your own words?` : "");
       const a = m.recallA || m.text;
       return `<h3>Give this thought another day.</h3><p class="sub">Choose what you want to remember. Review stays connected to its source.</p>
+        ${m.passageEditedAt && m.recallQ ? `<div class="wsnote">The marked words changed since this question was written. Check that it still fits${aiOn ? ", or rewrite it with AI below" : ""}.</div>` : ""}
         <label class="check"><input type="checkbox" id="rcOn" ${m.recallOff ? "" : "checked"}> Include this marker in daily recall</label>
         <label class="wslabel" for="rcQ">Question</label><textarea id="rcQ" rows="2" data-autofocus>${esc(q)}</textarea>
         <label class="wslabel" for="rcA">Answer to reveal</label><textarea id="rcA" rows="3">${esc(a)}</textarea>
@@ -296,6 +302,100 @@ function body(): string {
         <div class="tchips"><button data-in="1">Tomorrow</button><button data-in="3">In 3 days</button><button data-in="7">Next week</button><button data-in="0">Now</button></div>`;
     }
   }
+}
+
+/** What this marker has written into the note, each with its saved versions. */
+function writtenHTML(m: Marker) {
+  const outs = Object.entries(m.outputs || {}).filter(([oid]) => document.querySelector(`#editor .mout[data-oid="${CSS.escape(oid)}"]`));
+  if (!outs.length) return "";
+  return `<div class="wslabel">Written into this note</div><div class="written">${outs.map(([oid, revs]) => {
+    const last = revs[revs.length - 1];
+    return `<div class="wout"><button class="wjump" data-jump="${oid}"><b>${esc(last.text.slice(0, 120))}${last.text.length > 120 ? "…" : ""}</b><small>${revs.length} version${revs.length > 1 ? "s" : ""} · last ${agoLong(last.at)}</small></button>
+      ${revs.length > 1 ? `<details class="wrevs"><summary>History</summary>${[...revs].reverse().map((r, i) => `<div class="wrev"><span><small>${i === 0 ? "Current" : new Date(r.at).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>${esc(r.text.slice(0, 160))}${r.text.length > 160 ? "…" : ""}</span>${i === 0 ? "" : `<button class="btn2 small" data-restore="${oid}" data-rev="${revs.length - 1 - i}">Restore</button>`}</div>`).join("")}</details>` : ""}</div>`;
+  }).join("")}</div>`;
+}
+
+/** Shortcuts that fit the marked content: math gets steps and checks, definitions get flashcards, processes get steps, and so on. */
+export function contextActions(m: Marker): string[] {
+  const t = m.text.trim();
+  if (!t) return ["Outline this topic", "Summarize this note", "Make a checklist from this note", "Quiz me on this note"];
+  const a: string[] = [];
+  const mathy = /[=^√Σ∫≤≥±]|\d\s*[-+*/×÷]\s*\d|\b(equation|formula|derivative|integral|series|limit|matrix|probability)\b/i.test(t);
+  const code = /[{};]\s*$|=>|\b(function|return|class|def|for\s*\(|while\s*\()\b/.test(t);
+  if (code) a.push("Explain this code line by line", "What does this output?");
+  if (mathy && !code) a.push("Show the steps", "Try it with numbers", "Explain each symbol");
+  if (/\b(is|are|means|refers to|defined as|called)\b/i.test(t) && t.length < 240) a.push("Make a flashcard", "Give a counterexample");
+  if (/\b(first|then|next|finally|steps?|process|stages?|cycle|phases?|pathway)\b/i.test(t)) a.push("Turn into numbered steps", "Draw the process");
+  if (/\b(1[5-9]\d{2}|20\d{2})\b|\b(century|war|era|revolution|dynasty|treaty)\b/i.test(t)) a.push("Put this on a timeline");
+  if (/\b(vs\.?|versus|compared|unlike|whereas|differs?)\b/i.test(t)) a.push("Compare in a table");
+  if (/\b(because|causes?|leads? to|results? in|so that|therefore)\b/i.test(t)) a.push("Why does this happen?");
+  if (/\?\s*$/.test(t)) a.push("Answer this");
+  if (t.length > 280) a.push("Summarize in one sentence");
+  a.push("Explain this simpler", "Give me an example", "Quiz me on this");
+  return [...new Set(a)].slice(0, 6);
+}
+
+/** Every marker reachable through links from this one (including itself), nearest first. */
+function connectedMarkers(m: Marker, max = 15) {
+  const seen = new Set([m.id]), out: Marker[] = [m], queue = [m];
+  while (queue.length && out.length < max) {
+    const cur = queue.shift()!;
+    for (const id of cur.links || []) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const x = state.markers.get(id);
+      if (!x || x.deleted || !note(x.noteId) || note(x.noteId)!.deleted) continue;
+      out.push(x);
+      queue.push(x);
+      if (out.length >= max) break;
+    }
+  }
+  return out;
+}
+
+/** Combine connected points into a new study-guide note. Each section is a marker linked back to its source point. */
+async function buildStudyGuide(m: Marker) {
+  const points = connectedMarkers(m);
+  if (points.length < 2) return toast("Link this marker to at least one other point first.");
+  const src = note(m.noteId);
+  const title = `Study guide: ${(m.text || src?.title || "connected points").slice(0, 70)}`;
+  const guide = await newNote(src?.courseId || "", title, "blank", "<p></p>");
+  const sections: { mk: Marker; html: string }[] = [];
+  for (const p of points) {
+    const pn = note(p.noteId);
+    const back = newMarker(guide.id, p.text || pn?.title || "A point", "link");
+    back.links = [p.id];
+    back.recallQ = p.recallQ || null;
+    back.recallA = p.recallA || null;
+    const answers = p.thread.filter(t => t.role !== "user" && (t.text || t.calc) && !t.text.startsWith("⚠") && !/^(Formatted|This marker will|Linked to)/.test(t.text)).slice(-2)
+      .map(t => (t.calc ? `<p><code>${esc(t.calc)}</code> = <strong>${esc(t.result || "")}</strong></p>` : mdToHtml(t.text.replace(/^✎\s*/, ""))));
+    const body = [
+      p.recallQ ? `<p><strong>Q:</strong> ${esc(p.recallQ)}</p>${p.recallA ? `<p><strong>A:</strong> ${esc(p.recallA)}</p>` : ""}` : "",
+      ...answers,
+      p.draft?.trim() ? mdToHtml(p.draft) : "",
+      `<p><em>From ${esc(pn?.title || "a note")} · ${esc(courseName(pn?.courseId))}</em></p>`
+    ].join("");
+    sections.push({ mk: back, html: `<h3><span data-marker="${back.id}">${esc((p.text || pn?.title || "A point").slice(0, 160))}</span><span data-pin="${back.id}"></span></h3>${body}` });
+  }
+  let intro = `<p>${points.length} connected points from ${[...new Set(points.map(p => note(p.noteId)?.title))].map(t => esc(t || "")).join(", ")}. Each heading's marker links back to where the point came from.</p>`;
+  if (aiOn) {
+    try {
+      const all = points.map(p => `- ${p.text || note(p.noteId)?.title}${p.recallA ? ` (${p.recallA})` : ""}`).join("\n");
+      const r = await askMarker({ intent: "Write a short overview (under 120 words) of how these points connect, as the opening of a study guide.", passage: "", before: "", after: "", note: all, title, course: courseName(src?.courseId), thread: [] });
+      if (r.markdown) intro = mdToHtml(r.markdown) + intro;
+    } catch { /* the guide still works without the overview */ }
+  }
+  for (const sct of sections) { state.markers.set(sct.mk.id, sct.mk); await putMarker(sct.mk); }
+  for (const p of points) {
+    const back = sections.find(x => x.mk.links?.[0] === p.id)!.mk;
+    const latest = state.markers.get(p.id)!;
+    await putMarker({ ...latest, links: [...new Set([...(latest.links || []), back.id])] });
+  }
+  const html = `<h2>${esc(title)}</h2>${intro}${sections.map(x => x.html).join("")}`;
+  await putNote({ ...guide, html, plain: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() });
+  closeBox();
+  openNoteFn(guide.id);
+  toast("Study guide created. Each section links back to its point.");
 }
 
 function suggestMarkers(m: Marker) {
@@ -317,16 +417,20 @@ function relatedNotesHTML(m: Marker) {
 
 /* ---------- tab behavior ---------- */
 /* Draft autosave: keeps the latest text and writes it shortly after typing stops (or right away on flush). */
-let pendingDraft: string | null = null;
-const commitDraft = debounce(() => {
-  if (pendingDraft === null || !current) return;
-  const v = pendingDraft;
+/* Delayed saves remember which marker they belong to, so switching markers or closing the card can't misapply them. */
+let pendingDraft: { id: string; v: string } | null = null;
+let pendingQA: { id: string; q: string; a: string } | null = null;
+const commitPending = debounce(() => {
+  const d = pendingDraft, qa = pendingQA;
   pendingDraft = null;
-  if (current.draft !== v) update({ draft: v }, false);
+  pendingQA = null;
+  if (d && state.markers.get(d.id)?.draft !== d.v) updateMarker(d.id, { draft: d.v }, false);
+  if (qa) updateMarker(qa.id, { recallQ: qa.q || null, recallA: qa.a || null, passageEditedAt: null }, false);
 }, 500);
-const saveDraft = Object.assign((v: string) => { pendingDraft = v; commitDraft(); }, {
-  flush: (v?: string) => { if (v !== undefined) pendingDraft = v; commitDraft.flush(); }
+const saveDraft = Object.assign((v: string) => { if (current) { pendingDraft = { id: current.id, v }; commitPending(); } }, {
+  flush: (v?: string) => { if (v !== undefined && current) pendingDraft = { id: current.id, v }; commitPending.flush(); }
 });
+const saveQA = (q: string, a: string) => { if (current) { pendingQA = { id: current.id, q, a }; commitPending(); } };
 const TEMPLATES: Record<string, string> = {
   outline: "1. \n2. \n3. ",
   check: "- [ ] \n- [ ] \n- [ ] ",
@@ -361,6 +465,11 @@ function bindTab() {
       await update({ draft: "", type: m.type === "question" ? "note" : m.type });
       toast("Added to your note.");
     };
+    ws.querySelectorAll<HTMLButtonElement>("[data-jump]").forEach(b => b.onclick = () => scrollToOutput(b.dataset.jump!));
+    ws.querySelectorAll<HTMLButtonElement>("[data-restore]").forEach(b => b.onclick = () => {
+      const rev = current?.outputs?.[b.dataset.restore!]?.[Number(b.dataset.rev)];
+      if (rev && restoreOutput(b.dataset.restore!, rev.html)) { toast("Restored that version."); scrollToOutput(b.dataset.restore!); }
+    });
     $("#wNew", ws)!.onclick = async () => {
       const v = ta.value.trim();
       if (!v) return toast("Write something first.");
@@ -418,6 +527,7 @@ function bindTab() {
     };
   }
   if (tab === "related") {
+    $("#rGuide", ws)?.addEventListener("click", () => buildStudyGuide(m));
     const sel = $("#rSel", ws) as HTMLSelectElement;
     $("#rLink", ws)!.onclick = async () => {
       if (!sel.value) return toast("Choose a marker to link.");
@@ -447,8 +557,7 @@ function bindTab() {
   if (tab === "recall") {
     const on = $("#rcOn", ws) as HTMLInputElement, q = $("#rcQ", ws) as HTMLTextAreaElement, a = $("#rcA", ws) as HTMLTextAreaElement;
     on.onchange = () => update({ recallOff: !on.checked });
-    const saveQA = debounce(() => update({ recallQ: q.value.trim() || null, recallA: a.value.trim() || null }, false), 500);
-    q.oninput = saveQA; a.oninput = saveQA;
+    q.oninput = a.oninput = () => saveQA(q.value.trim(), a.value.trim());
     ws.querySelectorAll<HTMLButtonElement>(".mastery button").forEach(b => b.onclick = () => update({ mastery: Number(b.dataset.m) as Mastery }));
     ws.querySelectorAll<HTMLButtonElement>("[data-in]").forEach(b => b.onclick = () => {
       const d = Number(b.dataset.in);
@@ -459,7 +568,7 @@ function bindTab() {
       const n = note(m.noteId), ctx = contextAround(m.id);
       try {
         const r = await askMarker({ action: "recall", passage: m.text, before: ctx.before, after: ctx.after, note: ctx.note, title: n?.title || "", course: courseName(n?.courseId), thread: m.thread });
-        if (r.recall) await update({ recallQ: r.recall.q, recallA: r.recall.a });
+        if (r.recall) await update({ recallQ: r.recall.q, recallA: r.recall.a, passageEditedAt: null });
       } catch (err) { toast((err as Error).message); }
     });
   }

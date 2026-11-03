@@ -158,6 +158,16 @@ export async function importAll(json: string) {
   for (const m of data.markers || []) await putMarker({ ...m });
   if (data.meta) await putMeta({ studyDays: [...new Set([...(state.meta.studyDays || []), ...(data.meta.studyDays || [])])], points: Math.max(state.meta.points, data.meta.points || 0) });
 }
+/** Empty the local copy (used when an account signs out or a different account signs in on this device). */
+export async function resetLocal(ownerId: string | null) {
+  await Promise.all([db.notes.clear(), db.markers.clear(), db.courses.clear()]);
+  state.notes.clear();
+  state.markers.clear();
+  state.courses.clear();
+  state.meta = { ...defaultMeta(), ownerId, seeded: true, demoSeeded: true, demoVersion: 99 };
+  await db.meta.put(state.meta);
+  emit("notes"); emit("markers"); emit("courses"); emit("meta");
+}
 export async function wipeLocal() {
   await db.delete();
   location.hash = "";

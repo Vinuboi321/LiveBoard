@@ -21,11 +21,21 @@ LiveBoard installs as an app on iPad, iPhone, Windows and Mac from the browser, 
 | `outline this topic`, `summarize this note`, `draft notes on …` (on a blank-line marker) | Generated notes written at that spot | yes |
 | `draw a diagram`, `show the cycle` | A diagram rendered in the note | yes |
 | `turn this into a list` (multi-sentence passage) | The passage rewritten as a list | yes |
-| `e^0.5 * 0.5^4 / 4!`, `calc 3*(2+5)` | Exact result from a math engine, never from the model | no |
+| `e^0.5 * 0.5^4 / 4!`, `calc 3*(2+5)` | Result from a math engine with 64-digit precision, never from the model | no |
 | `make this a heading`, `bold`, `highlight`, `quote` | Formats the passage | no |
 | `link to elasticity` | Two-way link to the best-matching note (shows on that note too) | no |
 | `related notes` | Your other notes that mention the same ideas | no |
 | `remind me friday`, `review in 3 days`, `remind me before the exam` | The marker comes back in recall then | no |
+
+Shortcut chips adapt to what you marked. Math gets "Show the steps," a definition gets "Make a flashcard," a process gets "Turn into numbered steps," and code gets "Explain this code line by line."
+
+**Traceable writing.** Everything a marker writes into a note has a "marker ↗" chip that reopens it. Its Write tab keeps up to 12 versions of each block, and you can restore any of them.
+
+**Search.** Press ⌘K / Ctrl+K (or /) to search every marker's passage, drafts, questions, answers, recall cards and connections.
+
+**Study guides.** From a marker's Related tab, **Build a study guide** combines every point connected to it into one new note. Each section links back to its original point. With the AI connected, it also writes a short overview.
+
+**Free markers.** Drop a marker anywhere on a page (+ Marker, double-click a margin, or press and hold) and drag it around. Linked markers are joined by a faint thread behind the text.
 
 Markers are color-coded by type: writing, question, explanation, math, visual, link and reminder. Their dot fills in as you go from **Unsure** to **Getting it** to **Mastered**. A rail in the page margin shows every marker on the page. The classic formatting toolbar is hidden behind **Aa**.
 
@@ -71,7 +81,7 @@ npm install
 npm run dev            # app only; AI shows "not connected"
 npx vercel dev         # app + /api/marker with your .env.local
 npm run build          # typecheck + production build
-npx vite preview --port 4173 & node tests/e2e.cjs   # end-to-end test with a mocked AI
+npx vite preview --port 4173 & node tests/e2e.cjs && node tests/regressions.cjs   # end-to-end + regression tests, AI mocked
 ```
 
 ## How it's built
@@ -82,7 +92,7 @@ npx vite preview --port 4173 & node tests/e2e.cjs   # end-to-end test with a moc
 | Editor | TipTap (ProseMirror) with custom `marker` mark, `pin` node, `markerOutput` node and `diagram` node (`src/editor/extensions.ts`) |
 | Marker box | `src/editor/markerBox.ts`. Local intents run first (`src/ai.ts`), everything else goes to `/api/marker` |
 | AI | `api/marker.ts`, a Vercel function calling the Claude Messages API with a forced tool call, so results come back structured (`insert` vs `answer`, type, markdown, calc, mermaid, recall Q/A) |
-| Math | mathjs, evaluated on the device |
+| Math | mathjs with 64-digit BigNumber precision, evaluated on the device |
 | Storage | IndexedDB via Dexie (`src/store.ts`), local-first |
 | Sync | Supabase (`src/sync.ts`). Each record is stored as JSON with `updated_at`, and the newest wins. Row-level security keeps every row private to its owner |
 | Home | `src/home/home.ts`: dial, morning strip, recall |
@@ -95,4 +105,6 @@ The backend contract (`/api/marker`) and the Supabase tables are plain JSON, so 
 - **Scanned PDFs** need OCR, and markers on imported PDFs anchor to the extracted text, not to the original page layout.
 - **Tables** from the AI become lists, because the editor doesn't have tables yet.
 - **Sync conflicts** resolve per note (the newest save wins). Editing the same note on two devices while offline keeps only the later one.
+- **Accounts on shared devices:** notes on a device belong to one account. Signing out waits until everything has synced, then clears the device. A different account signing in starts from its own data.
+- **Math** uses 64-digit precision. A few functions only exist for ordinary numbers, and those results are marked ≈.
 - AI answers arrive all at once. Streaming would make long drafts feel faster.

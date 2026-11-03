@@ -408,8 +408,9 @@ function showRecall() {
   setProg();
   paint();
 }
-async function grade(m: Marker, good: boolean) {
+async function grade(m0: Marker, good: boolean) {
   if (!R) return;
+  const m = state.markers.get(m0.id) || m0; // latest copy, in case it was edited since the question was shown
   const ivl = good ? Math.max(1, (m.ivl || 1) * 2.5) : 1;
   const mastery = (good ? Math.min(2, m.mastery + 1) : Math.max(0, m.mastery - 1)) as Marker["mastery"];
   await putMarker({ ...m, ivl, mastery, due: Date.now() + (good ? ivl * DAY : 10 * 60 * 1000), type: m.type === "reminder" ? "question" : m.type, remindAt: m.type === "reminder" ? null : m.remindAt });

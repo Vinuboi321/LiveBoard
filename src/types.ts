@@ -49,6 +49,8 @@ export interface Marker {
   links?: string[]; // other markers this one is connected to (two-way)
   draft?: string; // unfinished writing in the Write tab
   recallOff?: boolean; // left out of daily recall
+  passageEditedAt?: number | null;
+  outputs?: Record<string, { at: number; text: string; html: string }[]>; // revision history of what this marker wrote into the note, by output id // the marked words changed after the recall question was written
   remindAt?: number | null;
   createdAt: number;
   updatedAt: number;
@@ -67,6 +69,7 @@ export interface Meta {
   seeded: boolean;
   demoSeeded?: boolean;
   demoVersion?: number;
+  ownerId?: string | null; // the account this device's notes belong to
 }
 
 export interface AIResult {

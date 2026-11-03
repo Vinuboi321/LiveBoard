@@ -3,7 +3,8 @@ import { destroyHome, installHomeListeners, renderHome, setFocusNote, homeAlive,
 import { destroyNote, renderNote } from "./editor/noteView";
 import { fileToHtml } from "./importers";
 import { openSettings } from "./settings";
-import { ensureStarterCourse, liveCourses, liveNotes, loadAll, newNote, note, onChange, putMarker, putMeta, putNote, state, deleteNote } from "./store";
+import { openSearch } from "./search";
+import { ensureStarterCourse, liveCourses, liveNotes, loadAll, markersOf, newNote, note, onChange, putMarker, putMeta, putNote, state, deleteNote } from "./store";
 import { initSync } from "./sync";
 import { $, debounce, toast } from "./util";
 import { newMarker } from "./store";
@@ -27,8 +28,9 @@ async function leaveNote() {
   if (!currentNote) return;
   destroyNote();
   const n = note(currentNote);
-  // A blank note left empty and untitled isn't worth keeping.
-  if (n && !n.deleted && n.title === "Untitled note" && !n.plain.trim() && !(n.html || "").trim()) await deleteNote(n.id);
+  // A blank note left empty and untitled isn't worth keeping, unless it holds markers (their writing lives in the marker, not the page text).
+  const empty = n && !n.deleted && n.title === "Untitled note" && !n.plain.trim() && !(n.html || "").trim() && markersOf(n.id).length === 0 && ![...state.markers.values()].some(m => m.noteId === n.id && !m.deleted);
+  if (empty) await deleteNote(n!.id);
   setFocusNote(n && !n.deleted ? n.id : null);
   currentNote = null;
 }
@@ -109,6 +111,11 @@ async function boot() {
   if (import.meta.env.VITE_ARTIFACT) await (await import("./demo")).seedDemo();
   installHomeListeners();
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
+  $("#searchBtn")!.onclick = () => openSearch(openNote);
+  document.addEventListener("keydown", e => {
+    const typing = (e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable='true']");
+    if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) { e.preventDefault(); openSearch(openNote); }
+  });
   addEventListener("hashchange", route);
   route();
   onChange(k => { if (k !== "meta") refresh(); });

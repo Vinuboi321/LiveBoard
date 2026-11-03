@@ -7,7 +7,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
 import { closeBox, openBox, setOpenNote, setPendingOpen, takePendingOpen, TYPE_INFO } from "./markerBox";
-import { dropFreeMarker, moveFreeMarker, pinIds, setEditor } from "./ops";
+import { dropFreeMarker, giveOutputIds, markRange, moveFreeMarker, outputsInDoc, pinIds, setEditor } from "./ops";
 import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
 import type { Note } from "../types";
 import { $, armButton, debounce, esc, toast } from "../util";
@@ -89,7 +89,41 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     if (!ed) return;
     n = { ...n, doc: ed.getJSON(), html: null, plain: ed.getText({ blockSeparator: "\n" }).slice(0, 200000) };
     putNote(n);
+    syncPassages();
+    recordRevisions();
   }, 600);
+  /** Keep a short history of every block a marker wrote, so edits can be traced and undone later. */
+  function recordRevisions() {
+    if (!ed) return;
+    giveOutputIds();
+    const byMarker = new Map<string, ReturnType<typeof outputsInDoc>>();
+    for (const o of outputsInDoc()) if (o.oid) byMarker.set(o.marker, [...(byMarker.get(o.marker) || []), o]);
+    for (const [mid, outs] of byMarker) {
+      const m = state.markers.get(mid);
+      if (!m) continue;
+      const hist = { ...(m.outputs || {}) };
+      let changed = false;
+      for (const o of outs) {
+        const list = hist[o.oid!] || [];
+        if (list[list.length - 1]?.text === o.text) continue;
+        hist[o.oid!] = [...list, { at: Date.now(), text: o.text, html: o.html }].slice(-12);
+        changed = true;
+      }
+      if (changed) putMarker({ ...m, outputs: hist });
+    }
+  }
+  /** When a marked passage is edited, the marker (and its default recall answer) follows the new wording. */
+  function syncPassages() {
+    if (!ed) return;
+    for (const m of markersOf(id)) {
+      if (!m.text) continue;
+      const r = markRange(m.id);
+      if (!r) continue;
+      const now = ed.state.doc.textBetween(r.from, r.to, " ").replace(/\s+/g, " ").trim().slice(0, 2000);
+      if (!now || now === m.text) continue;
+      putMarker({ ...m, text: now, recallA: !m.recallA || m.recallA === m.text ? now : m.recallA, passageEditedAt: Date.now() });
+    }
+  }
   cleanup.push(() => save.flush());
 
   ed = new Editor({
@@ -298,6 +332,14 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   };
   wrapEl.addEventListener("pointerup", endDrag);
   wrapEl.addEventListener("pointercancel", endDrag);
+
+  // "marker ↗" on anything a marker wrote reopens that marker on its Write tab, where its versions live
+  const onOpenMarker = (e: Event) => {
+    const { id: mid } = (e as CustomEvent).detail || {};
+    if (mid && state.markers.get(mid)) openBox(mid, document.querySelector(`#editor .pin[data-pin="${CSS.escape(mid)}"]`), "write");
+  };
+  stage.addEventListener("open-marker", onOpenMarker);
+  cleanup.push(() => stage.removeEventListener("open-marker", onOpenMarker));
 
   /* ----- opening markers from the page ----- */
   const edEl = $("#editor", stage)!;

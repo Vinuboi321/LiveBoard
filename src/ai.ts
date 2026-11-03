@@ -12,16 +12,34 @@ export type LocalAction =
 
 const WORDY = /\b(explain|why|what|how|make|turn|give|quiz|draw|summar|outline|draft|list|write|expand|example|compare|define|describe|show)\b/i;
 
-let mathMod: typeof import("mathjs") | null = null;
-export async function mathjs() {
-  if (!mathMod) mathMod = await import("mathjs");
-  return mathMod;
+/* Math runs on the device with 64 significant digits (BigNumber), so large integers and long decimals stay correct.
+   A few functions only exist for ordinary floating-point numbers; those fall back to 15-16 digits and say so. */
+type MathJs = import("mathjs").MathJsInstance;
+let big: MathJs | null = null, float: MathJs | null = null;
+async function engines() {
+  if (!big || !float) {
+    const m = await import("mathjs");
+    big = m.create(m.all, { number: "BigNumber", precision: 64 });
+    float = m.create(m.all, {});
+  }
+  return { big: big!, float: float! };
 }
+export async function mathjs() { return (await engines()).big; }
+const normalize = (expr: string) => expr.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/π/g, "pi").replace(/√\s*\(/g, "sqrt(");
 export async function evaluate(expr: string): Promise<string> {
-  const m = await mathjs();
-  const v = m.evaluate(expr.replace(/×/g, "*").replace(/÷/g, "/").replace(/−/g, "-").replace(/π/g, "pi").replace(/√\s*\(/g, "sqrt("));
-  if (typeof v === "function" || v === undefined) throw new Error("That isn't something to calculate.");
-  return m.format(v, { precision: 10 });
+  const { big, float } = await engines();
+  const e = normalize(expr);
+  const fmt = { precision: 20, lowerExp: -9, upperExp: 30 };
+  try {
+    const v = big.evaluate(e);
+    if (typeof v === "function" || v === undefined) throw new Error("That isn't something to calculate.");
+    return big.format(v, fmt);
+  } catch (err) {
+    if (/isn't something/.test((err as Error).message) || /Undefined symbol|Unexpected|Parenthesis|SyntaxError/.test(String(err))) throw err;
+    const v = float.evaluate(e);
+    if (typeof v === "function" || v === undefined) throw new Error("That isn't something to calculate.");
+    return float.format(v, { precision: 14 }) + " (≈, 15-digit precision)";
+  }
 }
 
 function nextWeekday(name: string) {

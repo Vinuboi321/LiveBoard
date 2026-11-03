@@ -1,5 +1,5 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
-import { applyRemote, applyRemoteMeta, putMeta, setDirtyHook, state } from "./store";
+import { applyRemote, applyRemoteMeta, resetLocal, setDirtyHook, state } from "./store";
 import type { Course, Marker, Note } from "./types";
 import { $ } from "./util";
 
@@ -28,13 +28,15 @@ setDirtyHook((kind, id) => {
   if (!sb || !session) return;
   if (kind === "meta") dirty.meta = true;
   else dirty[kind].add(id);
-  clearTimeout(pushTimer);
-  pushTimer = window.setTimeout(push, 1500);
+  schedulePush(1500);
 });
+function schedulePush(ms: number) { clearTimeout(pushTimer); pushTimer = window.setTimeout(push, ms); }
+export const hasUnsynced = () => dirty.meta || dirty.notes.size + dirty.markers.size + dirty.courses.size > 0;
 
-async function push() {
-  if (!sb || !session || busy) return;
-  if (!navigator.onLine) { setStatus("Offline · saved on this device"); return; }
+async function push(): Promise<boolean> {
+  if (!sb || !session) return false;
+  if (busy) { schedulePush(800); return false; } // a push is running; try again right after it
+  if (!navigator.onLine) { setStatus("Offline · saved on this device"); return false; }
   busy = true;
   const uidv = session.user.id;
   try {
@@ -42,25 +44,29 @@ async function push() {
       const ids = [...dirty[kind]];
       if (!ids.length) continue;
       const map = state[kind] as Map<string, Note | Marker | Course>;
-      const rows = ids.map(id => map.get(id)).filter(Boolean).map(r => ({ id: r!.id, user_id: uidv, data: r, updated_at: r!.updatedAt, deleted: !!r!.deleted }));
+      // Remember exactly which version of each record went up; anything edited during the upload stays queued.
+      const sent = new Map<string, number>();
+      const rows = ids.map(id => map.get(id)).filter(Boolean).map(r => { sent.set(r!.id, r!.updatedAt); return { id: r!.id, user_id: uidv, data: r, updated_at: r!.updatedAt, deleted: !!r!.deleted }; });
       for (let i = 0; i < rows.length; i += 200) {
         const { error } = await sb.from(kind).upsert(rows.slice(i, i + 200));
         if (error) throw error;
       }
-      ids.forEach(id => dirty[kind].delete(id));
+      ids.forEach(id => { const cur = map.get(id); if (!cur || cur.updatedAt === sent.get(id)) dirty[kind].delete(id); });
     }
     if (dirty.meta) {
-      const m = state.meta;
+      const m = state.meta, sentAt = m.updatedAt;
       const { error } = await sb.from("profiles").upsert({ user_id: uidv, data: { studyDays: m.studyDays, points: m.points, displayName: m.displayName }, updated_at: m.updatedAt });
       if (error) throw error;
-      dirty.meta = false;
+      if (state.meta.updatedAt === sentAt) dirty.meta = false;
     }
-    setStatus(null);
+    setStatus(hasUnsynced() ? "Syncing…" : null);
+    if (hasUnsynced()) schedulePush(500);
+    return !hasUnsynced();
   } catch (e) {
     console.warn("sync push failed", e);
     setStatus("Sync paused · retrying");
-    clearTimeout(pushTimer);
-    pushTimer = window.setTimeout(push, 15000);
+    schedulePush(15000);
+    return false;
   } finally {
     busy = false;
   }
@@ -91,7 +97,7 @@ export async function pull() {
         displayName: state.meta.displayName || d.displayName || ""
       });
     }
-    await putMeta({ lastPull: started - 60_000 });
+    await applyRemoteMeta({ lastPull: started - 60_000 });
   } catch (e) {
     console.warn("sync pull failed", e);
     setStatus("Sync paused · retrying");
@@ -105,15 +111,28 @@ function markEverythingDirty() {
   dirty.meta = true;
 }
 
+/** The notes on this device belong to one account. A different account starts from its own data, never the last person's. */
+async function claimDevice(uid: string) {
+  const owner = state.meta.ownerId || null;
+  if (owner && owner !== uid) {
+    await resetLocal(uid); // the previous account's copy is in that account's cloud; this one starts clean
+  } else if (!owner) {
+    await applyRemoteMeta({ ownerId: uid, lastPull: 0 }); // notes made before signing in become this account's
+    markEverythingDirty();
+  }
+  await pull();
+  push();
+}
+
 export async function initSync(onSignedIn: () => void) {
   if (!sb) return;
   const { data } = await sb.auth.getSession();
   session = data.session;
-  if (session) { await pull(); markEverythingDirty(); push(); }
+  if (session) await claimDevice(session.user.id);
   sb.auth.onAuthStateChange(async (event, s) => {
-    const wasSignedIn = !!session;
+    const prev = session?.user.id;
     session = s;
-    if (event === "SIGNED_IN" && !wasSignedIn) { await pull(); markEverythingDirty(); push(); onSignedIn(); }
+    if (event === "SIGNED_IN" && s && s.user.id !== prev) { await claimDevice(s.user.id); onSignedIn(); }
   });
   addEventListener("online", () => { pull(); push(); });
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") pull(); else push(); });
@@ -124,11 +143,15 @@ export async function signIn(email: string) {
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } });
   if (error) throw error;
 }
+/** Sign out only once everything is uploaded, then clear this device so the next person doesn't see these notes. */
 export async function signOut() {
   if (!sb) return;
-  await push();
+  clearTimeout(pushTimer);
+  for (let i = 0; i < 3 && hasUnsynced(); i++) await push();
+  if (hasUnsynced()) throw new Error("Some changes haven't synced yet. Check your connection and try again, so nothing is lost.");
   await sb.auth.signOut();
   session = null;
+  await resetLocal(null);
 }
 
 /* ---------- Classes and leaderboard ---------- */
