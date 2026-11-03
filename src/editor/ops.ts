@@ -1,0 +1,99 @@
+import type { Editor } from "@tiptap/core";
+import { mdToNoteHtml } from "../md";
+import { esc } from "../util";
+
+/* Editor operations the marker box performs. One editor is open at a time. */
+let ed: Editor | null = null;
+export const setEditor = (e: Editor | null) => { ed = e; };
+export const editor = () => ed;
+
+export function findPin(id: string): number | null {
+  if (!ed) return null;
+  let at: number | null = null;
+  ed.state.doc.descendants((n, pos) => {
+    if (at !== null) return false;
+    if (n.type.name === "pin" && n.attrs.id === id) { at = pos; return false; }
+    return true;
+  });
+  return at;
+}
+
+export function markRange(id: string): { from: number; to: number } | null {
+  if (!ed) return null;
+  let from = Infinity, to = -1;
+  ed.state.doc.descendants((n, pos) => {
+    if (n.isText && n.marks.some(m => m.type.name === "marker" && m.attrs.id === id)) {
+      from = Math.min(from, pos);
+      to = Math.max(to, pos + n.nodeSize);
+    }
+  });
+  return to < 0 ? null : { from, to };
+}
+
+export function contextAround(id: string) {
+  if (!ed) return { before: "", after: "", note: "" };
+  const doc = ed.state.doc;
+  const p = findPin(id) ?? doc.content.size;
+  const r = markRange(id);
+  const start = r ? r.from : p;
+  return {
+    before: doc.textBetween(Math.max(0, start - 1500), start, "\n", " "),
+    after: doc.textBetween(Math.min(doc.content.size, p + 1), Math.min(doc.content.size, p + 1500), "\n", " "),
+    note: ed.getText({ blockSeparator: "\n" })
+  };
+}
+
+/** Write a marker's result into the note, right after the block that holds the marker. */
+export function insertOutput(id: string, markdown: string, extra: { mermaid?: string | null; calcLine?: string | null } = {}) {
+  if (!ed) return false;
+  const p = findPin(id);
+  if (p === null) return false;
+  const $p = ed.state.doc.resolve(p);
+  const insertAt = $p.after($p.depth);
+  let html = markdown.trim() ? mdToNoteHtml(markdown) : "";
+  if (extra.calcLine) html += `<p><strong>${esc(extra.calcLine)}</strong></p>`;
+  if (extra.mermaid) html += `<div data-diagram="" data-code="${esc(extra.mermaid)}"></div>`;
+  if (!html) return false;
+  ed.chain().insertContentAt(insertAt, `<div data-marker-output="${esc(id)}" data-status="pending">${html}</div>`).run();
+  return true;
+}
+
+export type Fmt = "heading" | "subheading" | "list" | "numbered" | "checklist" | "bold" | "highlight" | "quote" | "plain";
+export function applyFormat(id: string, fmt: Fmt) {
+  if (!ed) return false;
+  const p = findPin(id);
+  if (p === null) return false;
+  const r = markRange(id);
+  const c = ed.chain().focus().setTextSelection(p);
+  switch (fmt) {
+    case "heading": c.setNode("heading", { level: 2 }); break;
+    case "subheading": c.setNode("heading", { level: 3 }); break;
+    case "list": c.toggleBulletList(); break;
+    case "numbered": c.toggleOrderedList(); break;
+    case "checklist": c.toggleTaskList(); break;
+    case "quote": c.toggleBlockquote(); break;
+    case "plain": c.setParagraph(); break;
+    case "bold": if (r) c.setTextSelection(r).toggleBold(); break;
+    case "highlight": if (r) c.setTextSelection(r).toggleHighlight(); break;
+  }
+  return c.run();
+}
+
+/** Remove a marker from the note: the pin goes, the passage stays as plain text. */
+export function removeMarkerFromDoc(id: string) {
+  if (!ed) return;
+  const r = markRange(id);
+  const chain = ed.chain();
+  if (r) chain.setTextSelection(r).unsetMark("marker");
+  chain.command(({ tr }) => {
+    const p = findPin(id);
+    if (p !== null) tr.delete(p, p + 1);
+    return true;
+  }).run();
+}
+
+export function pinIds(): Set<string> {
+  const ids = new Set<string>();
+  ed?.state.doc.descendants(n => { if (n.type.name === "pin" && n.attrs.id) ids.add(n.attrs.id); });
+  return ids;
+}

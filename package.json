@@ -1,0 +1,37 @@
+{
+  "name": "tray",
+  "version": "0.1.0",
+  "description": "Tray: a marker-first study notes app",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.46.1",
+    "@tiptap/core": "2.27.3",
+    "@tiptap/extension-highlight": "2.27.3",
+    "@tiptap/extension-placeholder": "2.27.3",
+    "@tiptap/extension-task-item": "2.27.3",
+    "@tiptap/extension-task-list": "2.27.3",
+    "@tiptap/extension-underline": "2.27.3",
+    "@tiptap/pm": "2.27.3",
+    "@tiptap/starter-kit": "2.27.3",
+    "dexie": "^4.0.10",
+    "dompurify": "^3.2.3",
+    "marked": "^14.1.4",
+    "mathjs": "^13.2.2",
+    "mermaid": "^11.4.1",
+    "pdfjs-dist": "^4.8.69"
+  },
+  "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@vercel/node": "^3.2.29",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.1"
+  },
+  "private": true,
+  "type": "module"
+}
