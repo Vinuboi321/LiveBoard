@@ -106,6 +106,7 @@ async function boot() {
   $("#today")!.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   await loadAll();
   await seedWelcome();
+  if (import.meta.env.VITE_ARTIFACT) await (await import("./demo")).seedDemo();
   installHomeListeners();
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
   addEventListener("hashchange", route);

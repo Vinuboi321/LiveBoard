@@ -101,7 +101,7 @@ button:disabled { cursor: default; opacity: .6; }
 .folder.small .ffront span { display: none; }
 .folder.small .ffront b { font-size: 1.25em; }
 .folder.mini .ffront { padding: .6em .5em; }
-.folder.mini .ffront b { font-size: 1.5em; }
+.folder.mini .ffront b { font-size: 1.3em; white-space: normal; line-height: 1.05; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .folder.mini .file .ft, .folder.mini .file .fm { display: none; }
 .file { position: absolute; left: 6%; width: 80%; top: 22%; height: 74%; border: 0; border-radius: .45em; background: color-mix(in srgb, var(--c) 10%, var(--paper)); box-shadow: 0 -1px 3px rgba(20, 15, 50, .18); padding: 0; text-align: left; display: flex; flex-direction: column; overflow: hidden; border-top: .36em solid var(--c);
   transform: translate(calc(var(--k) * .45em), calc(var(--k) * -1.2em)); transition: transform .34s cubic-bezier(.2, .8, .2, 1); }

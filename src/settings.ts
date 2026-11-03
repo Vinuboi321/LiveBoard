@@ -38,7 +38,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       ${user ? "" : `<p class="muted small">${syncConfigured() ? "Sign in to share or join a class." : "Classes need accounts, which aren't set up on this server."}</p>`}
     </section>
     <section><h3>Backup</h3>
-      ${import.meta.env.VITE_ARTIFACT ? `<p class="muted small">This is a preview. Backups download from the installed app.</p>` : `<div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>`}
+      ${import.meta.env.VITE_ARTIFACT ? `<p class="muted small">This is a preview filled with sample notes. Backups download from the installed app.</p><button class="btn" id="sDemo">Remove sample notes</button>` : `<div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>`}
       <button class="btn danger" id="sWipe">Delete everything on this device</button>
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
@@ -95,6 +95,14 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     try { await importAll(await f.text()); toast("Backup restored."); onChanged?.(); closeSettings(); }
     catch (err) { toast((err as Error).message || "Couldn't read that backup."); }
   };
+  const demoBtn = $("#sDemo", panel);
+  if (demoBtn) armButton(demoBtn, "Remove sample notes", "Tap again to remove them", async () => {
+    const { removeDemo } = await import("./demo");
+    await removeDemo();
+    toast("Sample notes removed.");
+    closeSettings();
+    onChanged?.();
+  });
   armButton($("#sWipe", panel)!, "Delete everything on this device", "Tap again to delete all local notes", () => wipeLocal());
   if (section) $(`#${section}`, panel)?.scrollIntoView({ block: "start" });
 }
