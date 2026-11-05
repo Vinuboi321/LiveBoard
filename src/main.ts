@@ -115,6 +115,10 @@ async function boot() {
   if (import.meta.env.VITE_ARTIFACT) await (await import("./demo")).seedDemo();
   installHomeListeners();
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
+  const ss = $("#syncState")!; // the sync line opens Settings, where waiting or refused items are explained
+  ss.setAttribute("role", "button"); ss.tabIndex = 0;
+  ss.onclick = () => openSettings(undefined, refresh);
+  ss.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openSettings(undefined, refresh); } };
   $("#searchBtn")!.onclick = () => openSearch(openNote);
   document.addEventListener("keydown", e => {
     const typing = (e.target as HTMLElement)?.closest?.("input, textarea, [contenteditable='true']");

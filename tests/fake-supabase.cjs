@@ -1,7 +1,8 @@
 // An in-memory stand-in for the parts of Supabase LiveBoard uses, wired into Playwright with page.route.
 // push_rows follows the same rules as supabase/schema.sql (revision check, owner check, server sequence).
 class FakeSupabase {
-  constructor() { this.rows = { notes: new Map(), markers: new Map(), courses: new Map() }; this.profiles = new Map(); this.seq = 0; this.down = false; this.calls = []; }
+  constructor() { this.rows = { notes: new Map(), markers: new Map(), courses: new Map() }; this.profiles = new Map(); this.gen = new Map(); this.seq = 0; this.down = false; this.calls = []; this.beforePush = null; this.refuse = new Set(); }
+  genOf(uid) { return this.gen.get(uid) || 0; }
   static session(uid) {
     const now = Math.floor(Date.now() / 1000);
     return { access_token: `tok-${uid}`, refresh_token: `ref-${uid}`, token_type: "bearer", expires_in: 3600, expires_at: now + 3600, user: { id: uid, aud: "authenticated", role: "authenticated", email: `${uid.slice(-4)}@test.edu` } };
@@ -11,7 +12,7 @@ class FakeSupabase {
   pushRows(uid, kind, rows) {
     return rows.map(r => {
       const cur = this.rows[kind].get(r.id);
-      if (cur && cur.user_id !== uid) return { id: r.id, status: "invalid" };
+      if ((cur && cur.user_id !== uid) || this.refuse.has(r.id) || JSON.stringify(r.data).length > 2000000) return { id: r.id, status: "invalid" };
       if (!cur) { this.rows[kind].set(r.id, { id: r.id, user_id: uid, data: r.data, updated_at: r.updated_at, deleted: !!r.deleted, rev: 1, seq: ++this.seq }); return { id: r.id, status: "ok", rev: 1 }; }
       const base = typeof r.base_rev === "number" ? r.base_rev : null;
       if ((base !== null && cur.rev === base) || (base === null && r.updated_at > cur.updated_at)) {
@@ -37,17 +38,27 @@ class FakeSupabase {
       if (url.pathname === "/rest/v1/rpc/delete_my_data") {
         for (const k of Object.keys(this.rows)) for (const [id, r] of this.rows[k]) if (r.user_id === uid) this.rows[k].delete(id);
         this.profiles.delete(uid);
-        return route.fulfill({ status: 204, body: "" });
+        this.gen.set(uid, this.genOf(uid) + 1);
+        return json(this.genOf(uid));
+      }
+      if (url.pathname === "/rest/v1/rpc/sync_state") return json({ gen: this.genOf(uid) });
+      if (url.pathname === "/rest/v1/rpc/push_profile") {
+        const { p_data, p_gen } = JSON.parse(req.postData() || "{}");
+        if (p_gen !== this.genOf(uid)) return json({ status: "erased" });
+        this.profiles.set(uid, p_data);
+        return json({ status: "ok" });
       }
       if (url.pathname === "/rest/v1/rpc/push_rows") {
-        const { p_kind, p_rows } = JSON.parse(req.postData() || "{}");
+        const { p_kind, p_rows, p_gen } = JSON.parse(req.postData() || "{}");
+        if (this.beforePush) { const hook = this.beforePush; this.beforePush = null; await hook(p_kind, p_rows); }
+        if (p_gen !== this.genOf(uid)) return json(p_rows.map(r => ({ id: r.id, status: "erased" })));
         return json(this.pushRows(uid, p_kind, p_rows));
       }
       const kind = url.pathname.replace("/rest/v1/", "");
       if (kind === "profiles") {
         if (req.method() === "GET") return json(this.profiles.has(uid) ? [{ data: this.profiles.get(uid) }] : []);
         const body = JSON.parse(req.postData() || "{}");
-        this.profiles.set(uid, (Array.isArray(body) ? body[0] : body).data);
+        void body; return route.fulfill({ status: 403, json: { message: "profiles are written through push_profile" } }); // mirrors the read-only policy
         return route.fulfill({ status: 201, body: "" });
       }
       if (this.rows[kind] && req.method() === "GET") {

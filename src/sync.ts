@@ -1,6 +1,6 @@
 import { createClient, type Session, type SupabaseClient } from "@supabase/supabase-js";
 import Dexie from "dexie";
-import { ack, ANON_DB, applyRemote, applyRemoteMeta, db, dbNameFor, type Kind, openDb, outboxRows, pendingCount, putCourse, putLocalMeta, putMarker, putNote, setWriteHook, state, deleteLocalDb } from "./store";
+import { ack, ANON_DB, applyRemote, applyRemoteMeta, block, blockAll, blockedCount, db, dbNameFor, type Kind, openDb, outboxRows, pendingCount, putCourse, putLocalMeta, putMarker, putNote, requeueAll, setWriteHook, state, deleteLocalDb } from "./store";
 import type { Course, Marker, Meta, Note, ThreadMsg } from "./types";
 import { $, uid } from "./util";
 
@@ -29,7 +29,7 @@ function setStatus(text: string | null) {
   el.hidden = !text;
   el.textContent = text || "";
 }
-const canSync = () => !!(sb && session && state.owner && session.user.id === state.owner);
+const canSync = () => !!(sb && session && state.owner && session.user.id === state.owner && !suspended);
 
 setWriteHook(() => { if (canSync()) schedulePush(1200); });
 function schedulePush(ms: number) { clearTimeout(pushTimer); pushTimer = window.setTimeout(() => { push(); }, ms); }
@@ -119,48 +119,69 @@ export async function claimSignedOutNotes(move: boolean) {
 }
 
 /* ---------- upload ---------- */
+let suspended = false; // set while deleting the account's data: nothing may upload
 export function push(): Promise<boolean> {
   if (pushing) return pushing.then(() => push()); // one upload at a time; queue another pass after it
   pushing = doPush().finally(() => { pushing = null; });
   return pushing;
 }
+const MAX_RECORD_BYTES = 1_900_000; // the server refuses records over about 2 MB
+
+function statusLine() {
+  const blocked = blockedCount(), waiting = pendingCount() - blocked;
+  if (state.meta.erasedAt) return "This account's online copy was deleted · notes here are on this device only";
+  if (blocked) return `${blocked} item${blocked === 1 ? "" : "s"} couldn't upload · open Settings`;
+  return waiting ? "Syncing…" : null;
+}
 
 async function doPush(): Promise<boolean> {
-  if (!canSync()) return false;
+  if (!canSync() || suspended) return false;
   if (!navigator.onLine) { setStatus(`Offline · ${pendingCount()} change${pendingCount() === 1 ? "" : "s"} saved on this device`); return false; }
   try {
-    const rows = await outboxRows();
+    if (state.meta.gen === undefined && !(await checkGeneration())) return false;
+    if (state.meta.erasedAt) { setStatus(statusLine()); return false; }
+    const rows = (await outboxRows()).filter(o => !o.blocked);
     for (const kind of ["courses", "notes", "markers"] as const) {
       const items = rows.filter(r => r.kind === kind);
       for (let i = 0; i < items.length; i += 100) {
+        if (suspended) return false;
         const batch = items.slice(i, i + 100).map(o => ({ o, rec: (state[kind] as Map<string, Note | Marker | Course>).get(o.id) })).filter(x => x.rec && x.rec.updatedAt === x.o.ver);
-        if (!batch.length) continue;
-        const payload = batch.map(({ o, rec }) => {
+        const send: typeof batch = [];
+        for (const x of batch) {
+          const { rev: _rev, ...data } = x.rec!;
+          if (JSON.stringify(data).length > MAX_RECORD_BYTES) await block(kind, x.rec!.id, x.o.ver, "too-large");
+          else send.push(x);
+        }
+        if (!send.length) continue;
+        const payload = send.map(({ o, rec }) => {
           const { rev, ...data } = rec!;
           return { id: rec!.id, base_rev: o.legacy ? null : rev ?? 0, data, updated_at: rec!.updatedAt, deleted: !!rec!.deleted };
         });
-        const { data, error } = await sb!.rpc("push_rows", { p_kind: kind, p_rows: payload });
+        const { data, error } = await sb!.rpc("push_rows", { p_kind: kind, p_rows: payload, p_gen: state.meta.gen });
         if (error) throw error;
         const results = Array.isArray(data) ? data as PushResult[] : [];
-        for (const { o, rec } of batch) {
+        if (results.some(r => r.status === "erased")) { await accountErased(); return false; }
+        for (const { o, rec } of send) {
           const r = results.find(x => x.id === rec!.id);
-          if (!r) continue;
+          if (!r) continue; // no answer for this one: it stays queued
           if (r.status === "ok") await ack(kind, rec!.id, o.ver, r.rev);
-          else if (r.status === "conflict" || r.status === "stale") await resolve(kind, rec!, r, o.ver);
-          else { console.warn("sync: server refused", kind, rec!.id); await ack(kind, rec!.id, o.ver); }
+          else if (r.status === "conflict" || r.status === "stale") await resolve(kind, rec!.id, r);
+          else await block(kind, rec!.id, o.ver, "refused"); // never counted as saved
         }
       }
     }
-    if (rows.some(r => r.kind === "meta")) {
-      const m = state.meta, ver = rows.find(r => r.kind === "meta")!.ver;
-      const { error } = await sb!.from("profiles").upsert({ user_id: state.owner, data: { studyDays: m.studyDays, points: m.points, displayName: m.displayName }, updated_at: m.updatedAt });
+    const meta = rows.find(r => r.kind === "meta");
+    if (meta && !suspended) {
+      const m = state.meta;
+      const { data, error } = await sb!.rpc("push_profile", { p_data: { studyDays: m.studyDays, points: m.points, displayName: m.displayName }, p_gen: m.gen });
       if (error) throw error;
-      await ack("meta", "meta", ver);
+      if ((data as { status?: string } | null)?.status === "erased") { await accountErased(); return false; }
+      if ((data as { status?: string } | null)?.status === "ok") await ack("meta", "meta", meta.ver);
     }
-    const left = pendingCount();
-    setStatus(left ? "Syncing…" : null);
-    if (left) schedulePush(800);
-    return !left;
+    const left = pendingCount() - blockedCount();
+    setStatus(statusLine());
+    if (left > 0) schedulePush(800);
+    return left === 0 && blockedCount() === 0;
   } catch (e) {
     console.warn("sync push failed", e);
     setStatus(`Sync paused · ${pendingCount()} change${pendingCount() === 1 ? "" : "s"} saved on this device`);
@@ -169,35 +190,68 @@ async function doPush(): Promise<boolean> {
   }
 }
 
-interface PushResult { id: string; status: "ok" | "conflict" | "stale" | "invalid"; rev: number; data?: unknown; deleted?: boolean }
+interface PushResult { id: string; status: "ok" | "conflict" | "stale" | "invalid" | "erased"; rev: number; data?: unknown; deleted?: boolean }
 
-/* ---------- conflicts: keep both sides, never drop either ---------- */
+/* ---------- the account's data generation ----------
+   Deleting the account's online data bumps a server-side generation number. Uploads carry the generation they were
+   made under, so a device that was offline during the deletion can't quietly put the deleted notes back. */
+async function checkGeneration(): Promise<boolean> {
+  const { data, error } = await sb!.rpc("sync_state");
+  if (error || typeof (data as { gen?: unknown } | null)?.gen !== "number") { console.warn("sync_state", error); return false; }
+  const gen = (data as { gen: number }).gen;
+  if (state.meta.gen === undefined) { await putLocalMeta({ gen }); return true; }
+  if (gen !== state.meta.gen) { await accountErased(); return false; }
+  return true;
+}
+async function accountErased() {
+  if (!state.meta.erasedAt) {
+    await blockAll("erased");
+    await putLocalMeta({ erasedAt: Date.now() });
+    notice("This account's online notes were deleted from another device. The notes on this device are kept here only. Settings has options.");
+  }
+  setStatus(statusLine());
+}
+/** After a deletion elsewhere: upload everything on this device again, as the account's new online copy. */
+export async function reuploadAfterErase() {
+  const { data, error } = await sb!.rpc("sync_state");
+  if (error) throw new Error("Couldn't reach the server. Try again when you're online.");
+  await putLocalMeta({ gen: (data as { gen: number }).gen, erasedAt: null, cursors: {} });
+  await requeueAll();
+  await push();
+}
+
+/* ---------- conflicts: keep both sides, never drop either ----------
+   Always resolved against the record as it is NOW (the student may have kept typing while the upload was in flight),
+   never against the copy that was sent. Reading the latest copy and writing the result happen with no wait in between. */
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+const latest = <T extends Note | Marker | Course>(kind: Kind, id: string) => (state[kind] as Map<string, T>).get(id);
 
-async function resolve(kind: Kind, local: Note | Marker | Course, r: PushResult, ver: number) {
-  const server = { ...(r.data as object), id: local.id, rev: r.rev, deleted: !!r.deleted } as Note | Marker | Course;
-  const rebase = <T extends Note | Marker | Course>(rec: T): T => { (state[kind] as Map<string, T>).set(rec.id, { ...rec, rev: r.rev }); return { ...rec, rev: r.rev }; };
+async function resolve(kind: Kind, id: string, r: PushResult) {
+  const server = { ...(r.data as object), id, rev: r.rev, deleted: !!r.deleted } as Note | Marker | Course;
+  const now0 = latest(kind, id);
+  if (!now0) { await applyRemote(kind, [server], true); return; }
 
-  if (r.status === "stale" && kind !== "markers") { // a copy from before revisions existed, older than the server: the server's is newer
-    if (kind === "notes" && !same((local as Note).doc, (server as Note).doc) && !local.deleted) await conflictCopy(local as Note, "older copy on this device");
-    await applyRemote(kind, [server], true);
+  if (kind === "markers") {
+    const cur = latest<Marker>(kind, id)!;
+    await putMarker({ ...mergeMarkers(cur, server as Marker), rev: Math.max(cur.rev || 0, r.rev) });
     return;
   }
-  if (kind === "markers") { await putMarker(rebase(mergeMarkers(local as Marker, server as Marker))); return; }
   if (kind === "courses") {
-    if (local.updatedAt >= server.updatedAt) await putCourse(rebase(local as Course));
+    const cur = latest<Course>(kind, id)!;
+    if (cur.updatedAt >= server.updatedAt || r.status === "conflict") await putCourse({ ...cur, rev: Math.max(cur.rev || 0, r.rev) });
     else await applyRemote(kind, [server], true);
     return;
   }
-  // notes
-  const l = local as Note, s = server as Note;
-  if (l.deleted && !s.deleted) { await applyRemote("notes", [s], true); notice(`“${s.title}” was edited on another device, so it was kept.`); return; }
-  if (!s.deleted && !l.deleted && (!same(l.doc, s.doc) || l.title !== s.title) && !same(l.doc, null)) {
+  // notes: this device's latest version stays in place; a different server version is kept as a copy
+  const s = server as Note;
+  const l0 = now0 as Note;
+  if (l0.deleted && !s.deleted) { await applyRemote("notes", [s], true); notice(`“${s.title}” was edited on another device, so it was kept.`); return; }
+  if (!s.deleted && !l0.deleted && (!same(l0.doc, s.doc) || l0.title !== s.title) && !same(s.doc, null)) {
     await conflictCopy(s, "from another device");
-    notice(`“${l.title}” changed on two devices. This device's version stayed; the other was saved as a copy.`);
+    notice(`“${l0.title}” changed on two devices. This device's version stayed; the other was saved as a copy.`);
   }
-  await putNote(rebase({ ...l, courseId: l.courseId || s.courseId }), true);
-  void ver;
+  const cur = latest<Note>("notes", id)!; // re-read: the copy above took a moment, and typing may have continued
+  await putNote({ ...cur, courseId: cur.courseId || s.courseId, rev: Math.max(cur.rev || 0, r.rev) }, true);
 }
 
 /** Save one side of a conflict as its own note. Its markers stay with the original, so the copy holds plain text. */
@@ -238,6 +292,7 @@ export function mergeMarkers(a: Marker, b: Marker): Marker {
 export async function pull(): Promise<boolean> {
   if (!canSync()) return false;
   try {
+    if (!(await checkGeneration())) { setStatus(statusLine()); return false; }
     const cursors = { ...(state.meta.cursors || {}) };
     for (const kind of ["courses", "notes", "markers"] as const) {
       for (;;) {
@@ -261,7 +316,7 @@ export async function pull(): Promise<boolean> {
         displayName: state.meta.displayName || (typeof d.displayName === "string" ? d.displayName.slice(0, 40) : "")
       });
     }
-    if (!pendingCount()) setStatus(null);
+    setStatus(statusLine());
     return true;
   } catch (e) {
     console.warn("sync pull failed", e);
@@ -322,12 +377,29 @@ export async function verifyCode(email: string, code: string) {
   // the SIGNED_IN event reopens LiveBoard as this account
 }
 
-/** Delete everything this account stored on the server (notes, markers, courses, profile, classes, recall points). */
-export async function deleteServerData() {
-  if (!sb || !session) throw new Error("Sign in first.");
-  const { error } = await sb.rpc("delete_my_data");
-  if (error) throw new Error("Couldn't delete your data: " + error.message);
+/**
+  Delete everything this account stored online, and this device's copy of it.
+  Order matters: stop all uploads and wait for any in flight, then delete on the server (which also bumps the account's
+  generation, so other devices can't re-upload the deleted notes), then sign out WITHOUT uploading, then remove the local copy.
+*/
+export async function deleteAccountData() {
+  if (!sb || !session || !state.owner) throw new Error("Sign in first.");
+  suspended = true;
+  clearTimeout(pushTimer);
+  try {
+    await hooks.beforeSwitch(); // saves the open note locally; nothing uploads while suspended
+    if (pushing) await pushing.catch(() => undefined);
+    const { error } = await sb.rpc("delete_my_data");
+    if (error) throw new Error("Couldn't delete your data: " + error.message);
+  } catch (e) { suspended = false; schedulePush(1000); throw e; }
+  const name = db.name;
+  const { error } = await sb.auth.signOut({ scope: "local" });
+  if (error) { try { localStorage.removeItem(authStorageKey()); } catch { /* storage blocked */ } }
+  session = null;
+  switching = true;
+  await deleteLocalDb(name);
 }
+
 
 /**
   Sign out of this device. Unsynced changes are never discarded: they stay in this account's database on the device and
@@ -337,7 +409,7 @@ export async function signOut(opts: { removeDeviceCopy?: boolean } = {}) {
   if (!sb) return { unsynced: 0 };
   await hooks.beforeSwitch();
   clearTimeout(pushTimer);
-  for (let i = 0; i < 3 && hasUnsynced() && navigator.onLine; i++) await push();
+  for (let i = 0; i < 3 && pendingCount() > blockedCount() && navigator.onLine; i++) await push();
   const unsynced = pendingCount();
   if (opts.removeDeviceCopy && unsynced) throw new Error(`${unsynced} change${unsynced === 1 ? " hasn't" : "s haven't"} uploaded yet, so this device's copy can't be removed. Connect to the internet and try again, or sign out without removing it.`);
   const name = db.name;
@@ -354,6 +426,7 @@ export async function signOut(opts: { removeDeviceCopy?: boolean } = {}) {
   switching = true;
   return { unsynced };
 }
+
 
 /* ---------- Classes and leaderboard ---------- */
 export async function createClass(name: string, displayName: string) {

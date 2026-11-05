@@ -79,6 +79,8 @@ export interface Meta {
   welcomeId?: string | null; // the starter note, not offered when moving signed-out notes into an account
   cursors?: Partial<Record<"notes" | "markers" | "courses", number>>; // last server sequence pulled
   claimDeclined?: string[]; // accounts that chose to keep this device's signed-out notes separate
+  gen?: number; // the account's server data generation this device last synced with (it changes when the online data is deleted)
+  erasedAt?: number | null; // when this device found the account's online data had been deleted elsewhere
 }
 
 export interface AIResult {

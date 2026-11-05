@@ -1,10 +1,14 @@
 import { aiHealth } from "./ai";
-import { course, exportAll, liveCourses, pendingCount, putCourse, putMeta, restoreBackup, state, wipeLocal } from "./store";
-import { createClass, currentUser, deleteServerData, joinClass, signIn, signOut, syncConfigured, verifyCode } from "./sync";
+import { blockedCount, course, exportAll, liveCourses, pendingCount, putCourse, putMeta, rekeyRefused, restoreBackup, state, wipeLocal } from "./store";
+import { createClass, currentUser, deleteAccountData, reuploadAfterErase, joinClass, signIn, signOut, syncConfigured, verifyCode } from "./sync";
 import { MAX_BACKUP_BYTES, validateBackup } from "./backup";
 import { $, armButton, esc, toast } from "./util";
 
 /* Settings: account, AI status, courses and classes, backup. */
+function blockedReasons() {
+  const r = new Set(state.blocked.values());
+  return [r.has("too-large") ? "Some are too large for the server (split very long notes into smaller ones)." : "", r.has("refused") ? "Some were refused, usually because they came from a backup of another account." : ""].filter(Boolean).join(" ");
+}
 let panel: HTMLElement | null = null;
 
 export function closeSettings() { panel?.remove(); panel = null; }
@@ -30,6 +34,8 @@ export async function openSettings(section?: string, onChanged?: () => void) {
         : `<p class="muted">Sign in to sync notes across devices, use AI markers and join a class.</p><form class="row" id="sIn"><input type="email" id="sEmail" required placeholder="you@school.edu" autocomplete="email"><button class="btn primary">Email me a sign-in link</button></form>
           <form class="row" id="sCode" hidden><input id="sCodeIn" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="6-digit code" aria-label="Code from the email"><button class="btn primary">Sign in</button></form>
           <p class="muted small" id="sCodeHint" hidden>Tap the link in the email, or type the code from it here. On iPad, use the code if you added LiveBoard to your home screen.</p>`}
+      ${user && state.meta.erasedAt ? `<div class="restorebox" role="alert"><p><b>This account's online notes were deleted</b> from another device. The notes on this device weren't uploaded again, and they stay here only.</p><div class="row"><button class="btn" data-export>Download a backup</button><button class="btn" id="sReupload">Upload them again as my account's notes</button></div></div>` : ""}
+      ${user && !state.meta.erasedAt && blockedCount() ? `<div class="restorebox" role="alert"><p><b>${blockedCount()} item${blockedCount() === 1 ? "" : "s"} couldn't upload.</b> ${blockedReasons()} They are kept on this device and aren't counted as saved, so this device's copy can't be removed until they're fixed.</p><div class="row"><button class="btn" data-export>Download a backup</button>${[...state.blocked.values()].includes("refused") ? `<button class="btn" id="sRekey">Upload them as new copies</button>` : ""}</div></div>` : ""}
       <label class="field">Your name (shown on class leaderboards)<input id="sName" maxlength="40" value="${esc(state.meta.displayName)}" placeholder="First name"></label>
     </section>
     <section><h3>AI markers</h3>
@@ -46,10 +52,11 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     <section><h3>Backup</h3>
       ${import.meta.env.VITE_ARTIFACT ? `<p class="muted small">This is a preview filled with sample notes. Backups download from the installed app.</p><button class="btn" id="sDemo">Remove sample notes</button>` : `<div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>`}
       <button class="btn danger" id="sWipe">Delete everything on this device</button>
-      ${user ? `<button class="btn danger" id="sDelServer">Delete my data from LiveBoard's servers</button><p class="muted small">Removes everything this account stored online. To also remove the copy on this device, use the button above first.</p>` : ""}
+      ${user ? `<button class="btn danger" id="sDelServer">Delete my account data</button><p class="muted small">Deletes everything this account stored online and the copy on this device, including changes that haven't uploaded. Download a backup first if you want to keep anything. Other devices signed in to this account keep their own copies but can no longer upload them.</p>` : ""}
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
 
+  panel.querySelectorAll<HTMLButtonElement>("[data-export]").forEach(b => b.onclick = () => ($("#sExport", panel!) as HTMLButtonElement | null)?.click());
   const name = $("#sName", panel) as HTMLInputElement;
   name.onchange = () => putMeta({ displayName: name.value.trim() });
   const out = async (removeDeviceCopy: boolean) => {
@@ -80,13 +87,21 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     catch (err) { toast((err as Error).message, 6000); }
   });
   const delSrv = $("#sDelServer", panel);
-  if (delSrv) armButton(delSrv, "Delete my data from LiveBoard's servers", "Tap again: this can't be undone", async () => {
+  if (delSrv) armButton(delSrv, "Delete my account data", "Tap again: deletes it online and on this device", async () => {
     try {
-      await deleteServerData();
-      await signOut({ removeDeviceCopy: false }).catch(() => undefined);
-      toast("Your notes, markers and class points were deleted from the server.", 7000);
+      await deleteAccountData();
+      toast("Your notes, markers and class points were deleted online and from this device.", 7000);
       setTimeout(() => location.reload(), 1200);
     } catch (err) { toast((err as Error).message, 7000); }
+  });
+  $("#sReupload", panel)?.addEventListener("click", async () => {
+    try { await reuploadAfterErase(); toast("Uploading this device's notes as your account's online copy."); openSettings(); }
+    catch (err) { toast((err as Error).message, 6000); }
+  });
+  $("#sRekey", panel)?.addEventListener("click", async () => {
+    const n = await rekeyRefused();
+    toast(n ? `Saved ${n} item${n === 1 ? "" : "s"} as new copies; uploading them now.` : "Nothing to fix.");
+    openSettings();
   });
   panel.querySelectorAll<HTMLInputElement>(".cname").forEach(inp => inp.onchange = async () => {
     const c = course(inp.closest<HTMLElement>(".crow")!.dataset.id!);

@@ -14,9 +14,9 @@ Secrets go only in Vercel's environment variables. Anything starting with `VITE_
 
 ## Database
 
-1. Run `supabase/schema.sql` in the SQL editor. It is safe to run again; upgrades add what's missing.
-2. Check in **Database → Functions** that `push_rows`, `begin_ai_request`, `log_recall` and `delete_my_data` exist.
-3. Check in **Authentication → Policies** that `notes`, `markers` and `courses` have only a **read own rows** policy (writes go through `push_rows`), and that `recall_events` has no insert policy.
+1. Run `supabase/schema.sql` in the SQL editor. It is safe to run again; upgrades add what's missing. When upgrading a database that already has notes, it also gives older records sequence numbers so new devices download them (`tests/sql/upgrade.sh` checks this). Run it before deploying a new app version: the app needs the new functions.
+2. Check in **Database → Functions** that `push_rows` (three arguments), `push_profile`, `sync_state`, `begin_ai_request`, `log_recall` and `delete_my_data` exist, and that the old two-argument `push_rows` is gone.
+3. Check in **Authentication → Policies** that `notes`, `markers`, `courses` and `profiles` have only a read policy (writes go through `push_rows` and `push_profile`), and that `recall_events` has no insert policy.
 4. Turn on Point-in-Time Recovery or daily backups (Supabase **Database → Backups**) before the pilot.
 
 ## Sign-in email (required before any student can sign in)
@@ -51,6 +51,7 @@ Don't give the link to students until each of these is true.
 - [ ] Download a backup, delete a note, restore the backup: the note returns.
 - [ ] Sign in on an iPad from the home-screen app by typing the code from the email.
 - [ ] Open the deployed site, then DevTools → Console: no "Content Security Policy" errors while importing, calculating and drawing a diagram.
+- [ ] Delete account data with an unsynced edit on one device and a second device offline: the server stays empty after both reconnect, and the second device says its online copy was deleted.
 - [ ] Set `AI_DISABLED=true` and redeploy: markers still write, calculate and recall; AI says it's off. Remove it.
 
 ## Limits to start with

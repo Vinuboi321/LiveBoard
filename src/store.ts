@@ -12,7 +12,9 @@ import { COURSE_COLORS, DAY, uid } from "./util";
   cleared when the server confirms that exact version, so an edit made offline can't be lost by closing the app.
 */
 export type Kind = "notes" | "markers" | "courses";
-export interface OutboxRow { key: string; kind: Kind | "meta"; id: string; ver: number; at: number; legacy?: boolean }
+export interface OutboxRow { key: string; kind: Kind | "meta"; id: string; ver: number; at: number; legacy?: boolean; blocked?: string | null }
+/** Why the server refused a record. It stays in the outbox (never counted as saved) until it is fixed or re-uploaded. */
+export type BlockReason = "refused" | "too-large" | "erased";
 
 class LiveBoardDB extends Dexie {
   notes!: Table<Note, string>;
@@ -54,7 +56,9 @@ export const state = {
   courses: new Map<string, Course>(),
   meta: null as unknown as Meta,
   /** keys of records with changes the server hasn't confirmed yet ("notes:<id>") */
-  pending: new Set<string>()
+  pending: new Set<string>(),
+  /** outbox entries the server refused, by key, with the reason */
+  blocked: new Map<string, BlockReason>()
 };
 
 const defaultMeta = (): Meta => ({ key: "meta", studyDays: [], points: 0, scope: "due", showTools: false, lastPull: 0, displayName: "", updatedAt: Date.now(), seeded: false });
@@ -91,11 +95,11 @@ const announce = (kind: Kind, id: string) => { try { channel?.postMessage({ kind
 
 export async function loadAll() {
   const [notes, markers, courses, meta, outbox] = await Promise.all([db.notes.toArray(), db.markers.toArray(), db.courses.toArray(), db.meta.get("meta"), db.outbox.toArray()]);
-  state.notes.clear(); state.markers.clear(); state.courses.clear(); state.pending.clear();
+  state.notes.clear(); state.markers.clear(); state.courses.clear(); state.pending.clear(); state.blocked.clear();
   notes.forEach(n => state.notes.set(n.id, n));
   markers.forEach(m => state.markers.set(m.id, m));
   courses.forEach(c => state.courses.set(c.id, { ...c, color: safeColor(c.color) }));
-  outbox.forEach(o => state.pending.add(o.key));
+  outbox.forEach(o => { state.pending.add(o.key); if (o.blocked) state.blocked.set(o.key, o.blocked as BlockReason); });
   state.meta = { ...defaultMeta(), ...(meta || {}) };
   if ((state.meta.scope as string) !== "due" && !["night", "week", "unit"].includes(state.meta.scope)) state.meta.scope = "due";
 }
@@ -111,6 +115,7 @@ export const courseName = (id?: string | null) => course(id)?.name || "No course
 export const markersOf = (noteId: string) => [...state.markers.values()].filter(m => m.noteId === noteId && !m.deleted);
 export const liveMarkers = () => [...state.markers.values()].filter(m => !m.deleted && state.notes.get(m.noteId) && !state.notes.get(m.noteId)!.deleted);
 export const pendingCount = () => state.pending.size;
+export const blockedCount = () => state.blocked.size;
 
 /* ---------- writes ---------- */
 const maxRev = (a?: number, b?: number) => (a === undefined && b === undefined ? undefined : Math.max(a || 0, b || 0));
@@ -119,9 +124,11 @@ const table = (kind: Kind) => db[kind] as unknown as Table<Note | Marker | Cours
 async function write(kind: Kind, rec: Note | Marker | Course) {
   const key = `${kind}:${rec.id}`;
   state.pending.add(key);
+  if (state.blocked.get(key) !== "erased") state.blocked.delete(key); // an edit is worth trying again, unless the account was erased
+  const erased = state.blocked.get(key) === "erased";
   await db.transaction("rw", table(kind), db.outbox, async () => {
     await table(kind).put(rec);
-    await db.outbox.put({ key, kind, id: rec.id, ver: rec.updatedAt, at: Date.now() });
+    await db.outbox.put({ key, kind, id: rec.id, ver: rec.updatedAt, at: Date.now(), blocked: erased ? "erased" : null });
   });
   announce(kind, rec.id);
   wrote();
@@ -175,12 +182,86 @@ export async function putLocalMeta(patch: Partial<Meta>) {
 /* ---------- used by sync ---------- */
 export const outboxRows = () => db.outbox.orderBy("at").toArray();
 
+/** The server refused this version. Keep it queued and marked, so it is never treated as saved. */
+export async function block(kind: Kind | "meta", id: string, ver: number | null, reason: BlockReason) {
+  const key = `${kind}:${id}`;
+  await db.transaction("rw", db.outbox, async () => {
+    const o = await db.outbox.get(key);
+    if (!o || (ver !== null && o.ver !== ver)) return; // edited since: the new version gets its own try
+    await db.outbox.put({ ...o, blocked: reason });
+    state.blocked.set(key, reason);
+  });
+}
+/** Mark everything waiting to upload as blocked (used when the account's online data was deleted elsewhere). */
+export async function blockAll(reason: BlockReason) {
+  await db.transaction("rw", db.outbox, async () => {
+    const rows = await db.outbox.toArray();
+    await db.outbox.bulkPut(rows.map(o => ({ ...o, blocked: reason })));
+    rows.forEach(o => state.blocked.set(o.key, reason));
+  });
+}
+/** Queue every record on this device for upload again (after the account's online data was deleted). */
+export async function requeueAll() {
+  const now = Date.now();
+  await db.transaction("rw", [db.notes, db.markers, db.courses, db.outbox, db.meta], async () => {
+    await db.outbox.clear();
+    for (const kind of ["courses", "notes", "markers"] as const) {
+      const rows = (await table(kind).toArray()).filter(r => !r.deleted).map(r => ({ ...r, rev: undefined }));
+      await table(kind).bulkPut(rows);
+      await db.outbox.bulkPut(rows.map(r => ({ key: `${kind}:${r.id}`, kind, id: r.id, ver: r.updatedAt, at: now, blocked: null })));
+    }
+    await db.outbox.put({ key: "meta:meta", kind: "meta", id: "meta", ver: state.meta.updatedAt, at: now, blocked: null });
+  });
+  await loadAll();
+  wrote();
+}
+/**
+  Records refused because their id belongs to another account (usually a backup restored into a second account):
+  give them, and everything that points at them, new ids, and queue them again. Nothing is deleted until the new copies are written.
+*/
+export async function rekeyRefused() {
+  const refused = [...state.blocked].filter(([, r]) => r === "refused").map(([k]) => k.split(":") as [Kind, string]);
+  if (!refused.length) return 0;
+  const map = new Map<string, string>(refused.map(([, id]) => [id, uid()]));
+  const re = (id?: string | null) => (id && map.get(id)) || id;
+  const reDoc = (n: unknown): unknown => {
+    if (Array.isArray(n)) return n.map(reDoc);
+    if (!n || typeof n !== "object") return n;
+    const o = { ...(n as Record<string, unknown>) };
+    if (o.attrs && typeof o.attrs === "object") { const a = { ...(o.attrs as Record<string, unknown>) }; if (typeof a.id === "string") a.id = re(a.id); if (typeof a.marker === "string") a.marker = re(a.marker); o.attrs = a; }
+    if (o.marks) o.marks = reDoc(o.marks);
+    if (o.content) o.content = reDoc(o.content);
+    return o;
+  };
+  const now = Date.now();
+  await db.transaction("rw", [db.notes, db.markers, db.courses, db.outbox], async () => {
+    let i = 0;
+    for (const kind of ["courses", "notes", "markers"] as const) {
+      for (const r of await table(kind).toArray()) {
+        const moved = map.has(r.id);
+        let next: Note | Marker | Course = { ...r, id: re(r.id)! };
+        if (kind === "notes") next = { ...(next as Note), courseId: re((r as Note).courseId)!, doc: reDoc((r as Note).doc) };
+        if (kind === "markers") { const m = r as Marker; next = { ...(next as Marker), noteId: re(m.noteId)!, linkNoteId: re(m.linkNoteId), links: m.links?.map(x => re(x)!) }; }
+        if (!moved && JSON.stringify(next) === JSON.stringify(r)) continue;
+        next = { ...next, rev: moved ? undefined : r.rev, updatedAt: now + i++ };
+        await table(kind).put(next);
+        await db.outbox.put({ key: `${kind}:${next.id}`, kind, id: next.id, ver: next.updatedAt, at: now, blocked: null });
+        if (moved) { await table(kind).delete(r.id); await db.outbox.delete(`${kind}:${r.id}`); }
+      }
+    }
+  });
+  await loadAll();
+  wrote();
+  (["courses", "notes", "markers"] as const).forEach(emit);
+  return map.size;
+}
+
 /** The server confirmed version `ver` as revision `rev`. Clear the outbox entry only if nothing changed since. */
 export async function ack(kind: Kind | "meta", id: string, ver: number, rev?: number) {
   const key = `${kind}:${id}`;
   await db.transaction("rw", kind === "meta" ? db.meta : table(kind as Kind), db.outbox, async () => {
     const o = await db.outbox.get(key);
-    if (o && o.ver === ver) { await db.outbox.delete(key); state.pending.delete(key); }
+    if (o && o.ver === ver) { await db.outbox.delete(key); state.pending.delete(key); state.blocked.delete(key); }
     if (kind !== "meta" && rev !== undefined) {
       const cur = await table(kind).get(id);
       if (cur && (cur.rev ?? 0) < rev) {
@@ -199,7 +280,7 @@ export async function applyRemote(kind: Kind, rows: (Note | Marker | Course)[], 
   if (!winners.length) return;
   await db.transaction("rw", table(kind), db.outbox, async () => {
     await table(kind).bulkPut(winners);
-    if (force) for (const r of winners) { await db.outbox.delete(`${kind}:${r.id}`); state.pending.delete(`${kind}:${r.id}`); }
+    if (force) for (const r of winners) { await db.outbox.delete(`${kind}:${r.id}`); state.pending.delete(`${kind}:${r.id}`); state.blocked.delete(`${kind}:${r.id}`); }
   });
   winners.forEach(r => map.set(r.id, r));
   emit(kind);

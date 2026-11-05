@@ -17,6 +17,17 @@ begin
   end loop;
 end $$;
 
+-- Records saved before revisions existed have seq = 0, which a fresh device (asking for seq > 0) would never download.
+-- Give each one a sequence number. The table locks keep uploads out while this runs; it does nothing once done.
+do $$
+declare t text;
+begin
+  foreach t in array array['notes','markers','courses'] loop
+    execute format('lock table public.%I in share row exclusive mode', t);
+    execute format('update public.%I set seq = nextval(''public.liveboard_seq'') where seq = 0', t);
+  end loop;
+end $$;
+
 -- p_rows: [{ id, base_rev (number, or null = "apply only if newer"), data, updated_at, deleted }]
 -- Returns one result per row: { id, status: ok | conflict | stale | invalid, rev, data?, deleted? }
 create or replace function public.push_rows(p_kind text, p_rows jsonb)

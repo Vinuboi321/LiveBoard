@@ -6,32 +6,32 @@ set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
 
 -- first write
-select public.push_rows('notes', '[{"id":"n1","base_rev":0,"data":{"title":"A1"},"updated_at":1,"deleted":false}]')->0->>'status' = 'ok' as first_write_ok \gset
+select public.push_rows('notes', '[{"id":"n1","base_rev":0,"data":{"title":"A1"},"updated_at":1,"deleted":false}]', 0)->0->>'status' = 'ok' as first_write_ok \gset
 \if :first_write_ok \else \echo 'FAIL first write' \quit \endif
 -- write on top of the latest revision
-select public.push_rows('notes', '[{"id":"n1","base_rev":1,"data":{"title":"A2"},"updated_at":2}]')->0->>'rev' = '2' as second_ok \gset
+select public.push_rows('notes', '[{"id":"n1","base_rev":1,"data":{"title":"A2"},"updated_at":2}]', 0)->0->>'rev' = '2' as second_ok \gset
 \if :second_ok \else \echo 'FAIL second write' \quit \endif
 -- a stale device (still on rev 1) is refused and gets the server copy back
-select (public.push_rows('notes', '[{"id":"n1","base_rev":1,"data":{"title":"STALE"},"updated_at":99}]')->0) as r \gset
+select (public.push_rows('notes', '[{"id":"n1","base_rev":1,"data":{"title":"STALE"},"updated_at":99}]', 0)->0) as r \gset
 select (:'r'::jsonb->>'status') = 'conflict' and (:'r'::jsonb->'data'->>'title') = 'A2' as stale_refused \gset
 \if :stale_refused \else \echo 'FAIL stale overwrite allowed' :r \quit \endif
 select (select data->>'title' from public.notes where id = 'n1') = 'A2' as server_kept \gset
 \if :server_kept \else \echo 'FAIL server lost data' \quit \endif
 -- legacy rows (no base) only apply when newer
-select public.push_rows('notes', '[{"id":"n1","base_rev":null,"data":{"title":"OLD"},"updated_at":1}]')->0->>'status' = 'stale' as legacy_old \gset
+select public.push_rows('notes', '[{"id":"n1","base_rev":null,"data":{"title":"OLD"},"updated_at":1}]', 0)->0->>'status' = 'stale' as legacy_old \gset
 \if :legacy_old \else \echo 'FAIL legacy older row applied' \quit \endif
 -- direct writes that bypass revisions: insert works only for own rows
 select (select count(*) from public.notes) = 1 as sees_own \gset
 \if :sees_own \else \echo 'FAIL A row count' \quit \endif
 -- bad ids are rejected
-select public.push_rows('notes', '[{"id":"../x","data":{}}]')->0->>'status' = 'invalid' as bad_id \gset
+select public.push_rows('notes', '[{"id":"../x","data":{}}]', 0)->0->>'status' = 'invalid' as bad_id \gset
 \if :bad_id \else \echo 'FAIL bad id accepted' \quit \endif
 
 -- user B can't see or take over A's row
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
 select (select count(*) from public.notes) = 0 as b_isolated \gset
 \if :b_isolated \else \echo 'FAIL B sees A rows' \quit \endif
-select public.push_rows('notes', '[{"id":"n1","base_rev":0,"data":{"title":"HIJACK"},"updated_at":5}]')->0->>'status' = 'invalid' as no_hijack \gset
+select public.push_rows('notes', '[{"id":"n1","base_rev":0,"data":{"title":"HIJACK"},"updated_at":5}]', 0)->0->>'status' = 'invalid' as no_hijack \gset
 \if :no_hijack \else \echo 'FAIL B overwrote A' \quit \endif
 update public.notes set data = '{"title":"X"}' where id = 'n1';
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
@@ -89,12 +89,32 @@ select (select points from public.class_leaderboard(:'cls') limit 1) = 10 as lb_
 -- account deletion removes only the caller's data
 set role authenticated;
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
-select public.push_rows('notes', '[{"id":"nb1","base_rev":0,"data":{"title":"B"},"updated_at":1}]') is not null as b_wrote \gset
+select public.push_rows('notes', '[{"id":"nb1","base_rev":0,"data":{"title":"B"},"updated_at":1}]', 0) is not null as b_wrote \gset
 set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
-select public.delete_my_data();
+select public.delete_my_data() = 1 as gen_bumped \gset
+\if :gen_bumped \else \echo 'FAIL generation not bumped' \quit \endif
 reset role;
 select (select count(*) from public.notes where user_id = '00000000-0000-0000-0000-00000000000a') = 0
    and (select count(*) from public.notes where user_id = '00000000-0000-0000-0000-00000000000b') = 1
    and (select count(*) from public.recall_events where user_id = '00000000-0000-0000-0000-00000000000a') = 0 as deleted_only_mine \gset
 \if :deleted_only_mine \else \echo 'FAIL account deletion' \quit \endif
+-- after deletion, a device still on generation 0 can't upload, and its profile write is refused
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.push_rows('notes', '[{"id":"old1","base_rev":0,"data":{"title":"resurrected"},"updated_at":9}]', 0)->0->>'status' = 'erased' as stale_gen_refused \gset
+\if :stale_gen_refused \else \echo 'FAIL stale device re-uploaded deleted data' \quit \endif
+select public.push_profile('{"points":5}', 0)->>'status' = 'erased' as profile_refused \gset
+\if :profile_refused \else \echo 'FAIL stale profile write' \quit \endif
+select (public.sync_state()->>'gen')::int = 1 as gen_visible \gset
+select public.push_rows('notes', '[{"id":"new1","base_rev":0,"data":{"title":"fresh"},"updated_at":9}]', 1)->0->>'status' = 'ok' as new_gen_ok \gset
+\if :new_gen_ok \else \echo 'FAIL current generation refused' \quit \endif
+reset role;
+select (select count(*) from public.notes where user_id = '00000000-0000-0000-0000-00000000000a') = 1 as only_fresh \gset
+\if :only_fresh \else \echo 'FAIL deleted note came back' \quit \endif
+\echo '(expected) the old two-argument upload no longer exists:'
+\set ON_ERROR_STOP 0
+set role authenticated;
+select public.push_rows('notes', '[]');
+reset role;
+\set ON_ERROR_STOP 1
 \echo 'ALL SQL CHECKS PASS'
