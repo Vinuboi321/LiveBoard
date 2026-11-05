@@ -25,7 +25,7 @@ interface Recall { queue: string[]; i: number; revealed: boolean; got: number; d
 
 let items: Item[] = [];
 let rot = 0, target = 0, sel = -1, hoverF = -1, hoverNote: string | null = null, dragging = false, lastDrawn: number | null = null, raf = 0;
-let G: { c: number; rF: number; hub: number; els: HTMLElement[] } = { c: 0, rF: 0, hub: 0, els: [] };
+let G: { c: number; rF: number; hub: number; push: number; els: HTMLElement[] } = { c: 0, rF: 0, hub: 0, push: 0, els: [] };
 let R: Recall | null = null;
 let focusNote: string | null = null;
 let lbOpen = false;
@@ -232,7 +232,8 @@ function sizeDial() {
   dial.style.setProperty("--hub", hub + "px");
   const ring = $("#ringline")!;
   ring.style.width = ring.style.height = 2 * rF + "px";
-  G = { c, rF, hub, els: [...document.querySelectorAll<HTMLElement>("#folders .folder")] };
+  // notes away from the pointer sit a little outside the ring, so they don't crowd the hub or the selected note
+  G = { c, rF, hub, push: Math.max(14, Math.min(46, size * 0.06)), els: [...document.querySelectorAll<HTMLElement>("#folders .folder")] };
   items.forEach((f, i) => {
     const arc = rF * f.span * Math.PI / 180;
     f.W = Math.max(64, Math.min(maxW * Math.pow(f.w / WMAX, 0.85), arc * 1.08));
@@ -249,12 +250,13 @@ function sizeDial() {
 }
 
 function draw() {
-  const { c, rF } = G;
+  const { c, rF, push } = G;
   let best = 0, bd = 999;
   items.forEach((f, i) => {
     const a = f.ang + rot, d = wrapDeg(a), t = a * Math.PI / 180;
     if (Math.abs(d) < bd) { bd = Math.abs(d); best = i; }
-    f.x = c + rF * Math.sin(t); f.y = c - rF * Math.cos(t); f.near = Math.max(0, 1 - Math.abs(d) / 90);
+    const out = push * Math.min(1, Math.abs(d) / 35); // 0 at the pointer, full a little way round
+    f.x = c + (rF + out) * Math.sin(t); f.y = c - (rF + out) * Math.cos(t); f.near = Math.max(0, 1 - Math.abs(d) / 90);
   });
   if (best !== sel) { sel = best; updateInfo(); }
   paint();
