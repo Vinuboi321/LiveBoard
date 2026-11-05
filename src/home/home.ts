@@ -173,7 +173,7 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
   layout();
   const prevRot = rot, prevTarget = target;
   stage.innerHTML = `<div class="dialwrap"><div class="morning" id="morning"></div>
-    <div id="dial" tabindex="0" role="listbox" aria-label="Your notes, arranged by when you last opened them. Use the arrow keys to spin and Enter to open.">
+    <div id="dial" tabindex="0" role="group" aria-roledescription="dial" aria-label="Your notes, arranged by when you last opened them. Use the arrow keys to spin and Enter to open.">
       <div class="ringline" id="ringline"></div><div id="folders"></div><div class="pointer"></div>
       <div class="hub" id="hub"><svg class="hubprog" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
         <div class="info" id="info" aria-live="polite"></div>
@@ -284,7 +284,15 @@ const snapFrom = (r: number) => {
 };
 const goTo = (k: number) => { if (!items.length) return; k = ((k % items.length) + items.length) % items.length; target = rot - wrapDeg(items[k].ang + rot); };
 
-function setHc(v: string, el: HTMLElement) { [$("#hub"), el].forEach(x => x?.style.setProperty("--hc", v)); }
+/** Dark text on light course colors (yellow, mint), white on dark ones, so labels stay readable. */
+function inkOn(hex: string) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return "#fff";
+  const [r, g, b] = [0, 2, 4].map(i => { const c = parseInt(m[1].slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? "#1B1638" : "#fff";
+}
+function setHc(v: string, el: HTMLElement) { [$("#hub"), el].forEach(x => { x?.style.setProperty("--hc", v); x?.style.setProperty("--hcink", inkOn(v)); }); }
 function updateInfo() {
   if (R) return;
   const el = $("#info"), fi = hoverF >= 0 ? hoverF : sel, f = items[fi];

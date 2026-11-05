@@ -1,6 +1,6 @@
 import { aiHealth } from "./ai";
 import { course, exportAll, liveCourses, pendingCount, putCourse, putMeta, restoreBackup, state, wipeLocal } from "./store";
-import { createClass, currentUser, joinClass, signIn, signOut, syncConfigured } from "./sync";
+import { createClass, currentUser, deleteServerData, joinClass, signIn, signOut, syncConfigured, verifyCode } from "./sync";
 import { MAX_BACKUP_BYTES, validateBackup } from "./backup";
 import { $, armButton, esc, toast } from "./util";
 
@@ -27,7 +27,9 @@ export async function openSettings(section?: string, onChanged?: () => void) {
         : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.${pendingCount() ? ` <span class="muted">${pendingCount()} change${pendingCount() === 1 ? "" : "s"} waiting to upload.</span>` : ""}</p>
           <div class="row"><button class="btn" id="sOut">Sign out</button><button class="btn" id="sOutRemove" title="Also delete this account's notes from this device once they're uploaded">Sign out and remove from this device</button></div>
           <p class="muted small">Signing out keeps a copy on this device for next time, unless you remove it. Someone else signing in here never sees it.</p>`
-        : `<p class="muted">Sign in to sync notes across devices, use AI markers and join a class.</p><form class="row" id="sIn"><input type="email" id="sEmail" required placeholder="you@school.edu" autocomplete="email"><button class="btn primary">Email me a link</button></form>`}
+        : `<p class="muted">Sign in to sync notes across devices, use AI markers and join a class.</p><form class="row" id="sIn"><input type="email" id="sEmail" required placeholder="you@school.edu" autocomplete="email"><button class="btn primary">Email me a sign-in link</button></form>
+          <form class="row" id="sCode" hidden><input id="sCodeIn" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="6-digit code" aria-label="Code from the email"><button class="btn primary">Sign in</button></form>
+          <p class="muted small" id="sCodeHint" hidden>Tap the link in the email, or type the code from it here. On iPad, use the code if you added LiveBoard to your home screen.</p>`}
       <label class="field">Your name (shown on class leaderboards)<input id="sName" maxlength="40" value="${esc(state.meta.displayName)}" placeholder="First name"></label>
     </section>
     <section><h3>AI markers</h3>
@@ -44,6 +46,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     <section><h3>Backup</h3>
       ${import.meta.env.VITE_ARTIFACT ? `<p class="muted small">This is a preview filled with sample notes. Backups download from the installed app.</p><button class="btn" id="sDemo">Remove sample notes</button>` : `<div class="row"><button class="btn" id="sExport">Download backup</button><label class="btn" for="sImport">Restore backup</label><input type="file" id="sImport" accept="application/json,.json" hidden></div>`}
       <button class="btn danger" id="sWipe">Delete everything on this device</button>
+      ${user ? `<button class="btn danger" id="sDelServer">Delete my data from LiveBoard's servers</button><p class="muted small">Removes everything this account stored online. To also remove the copy on this device, use the button above first.</p>` : ""}
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
 
@@ -62,8 +65,28 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   ($("#sIn", panel) as HTMLFormElement | null)?.addEventListener("submit", async e => {
     e.preventDefault();
     const email = ($("#sEmail", panel!) as HTMLInputElement).value.trim();
-    try { await signIn(email); toast(`Check ${email} for a sign-in link.`, 5000); }
-    catch (err) { toast((err as Error).message); }
+    try {
+      await signIn(email);
+      toast(`Check ${email} for a sign-in email.`, 5000);
+      $("#sCode", panel!)!.hidden = false; $("#sCodeHint", panel!)!.hidden = false;
+      ($("#sCodeIn", panel!) as HTMLInputElement).focus();
+    } catch (err) { toast((err as Error).message, 6000); }
+  });
+  ($("#sCode", panel) as HTMLFormElement | null)?.addEventListener("submit", async e => {
+    e.preventDefault();
+    const email = ($("#sEmail", panel!) as HTMLInputElement).value.trim(), code = ($("#sCodeIn", panel!) as HTMLInputElement).value.trim();
+    if (!code) return;
+    try { await verifyCode(email, code); toast("Signed in."); }
+    catch (err) { toast((err as Error).message, 6000); }
+  });
+  const delSrv = $("#sDelServer", panel);
+  if (delSrv) armButton(delSrv, "Delete my data from LiveBoard's servers", "Tap again: this can't be undone", async () => {
+    try {
+      await deleteServerData();
+      await signOut({ removeDeviceCopy: false }).catch(() => undefined);
+      toast("Your notes, markers and class points were deleted from the server.", 7000);
+      setTimeout(() => location.reload(), 1200);
+    } catch (err) { toast((err as Error).message, 7000); }
   });
   panel.querySelectorAll<HTMLInputElement>(".cname").forEach(inp => inp.onchange = async () => {
     const c = course(inp.closest<HTMLElement>(".crow")!.dataset.id!);

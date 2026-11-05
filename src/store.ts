@@ -65,7 +65,29 @@ export async function openStore(owner: string | null) {
   if (db.name !== dbNameFor(owner)) { db.close(); db = new LiveBoardDB(dbNameFor(owner)); }
   state.owner = owner;
   await loadAll();
+  listenToOtherTabs();
 }
+
+/* ---------- other tabs ----------
+   Two tabs (or an installed app plus a browser tab) share one database. Each write is announced, and the other tabs
+   reload that record, so an open editor shows the newer text instead of saving over it later. */
+let channel: BroadcastChannel | null = null;
+function listenToOtherTabs() {
+  channel?.close();
+  if (typeof BroadcastChannel === "undefined") return;
+  channel = new BroadcastChannel(`lb:${db.name}`);
+  channel.onmessage = async (e: MessageEvent<{ kind: Kind; id: string }>) => {
+    const { kind, id } = e.data || ({} as { kind: Kind; id: string });
+    if (!["notes", "markers", "courses"].includes(kind) || typeof id !== "string") return;
+    const rec = await table(kind).get(id);
+    if (!rec) return;
+    (state[kind] as Map<string, Note | Marker | Course>).set(id, kind === "courses" ? { ...rec, color: safeColor((rec as Course).color) } : rec);
+    if (await db.outbox.get(`${kind}:${id}`)) state.pending.add(`${kind}:${id}`);
+    emit(kind);
+    remoteListeners.forEach(fn => fn(kind, [id]));
+  };
+}
+const announce = (kind: Kind, id: string) => { try { channel?.postMessage({ kind, id }); } catch { /* channel closed */ } };
 
 export async function loadAll() {
   const [notes, markers, courses, meta, outbox] = await Promise.all([db.notes.toArray(), db.markers.toArray(), db.courses.toArray(), db.meta.get("meta"), db.outbox.toArray()]);
@@ -101,6 +123,7 @@ async function write(kind: Kind, rec: Note | Marker | Course) {
     await table(kind).put(rec);
     await db.outbox.put({ key, kind, id: rec.id, ver: rec.updatedAt, at: Date.now() });
   });
+  announce(kind, rec.id);
   wrote();
 }
 

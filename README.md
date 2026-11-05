@@ -51,7 +51,7 @@ You need three free accounts: **Supabase** (accounts and sync), an **Anthropic A
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. Open **SQL Editor**, then **New query**. Paste all of `supabase/schema.sql` and click **Run**. It's safe to run again after an update; each upgrade is also in `supabase/migrations/`.
-3. Go to **Authentication → Providers**. Email is on by default, and LiveBoard signs people in with magic links.
+3. Go to **Authentication → Providers**. Email is on by default, and LiveBoard signs people in with an emailed link or code. Supabase's built-in email only reaches your own team (2 an hour), so set up custom SMTP and add the code to the email template before inviting students; see [docs/deployment.md](docs/deployment.md#sign-in-email-required-before-any-student-can-sign-in).
 4. Go to **Authentication → URL Configuration**. Set **Site URL** to your Vercel URL once you have it (for example `https://liveboard-yourname.vercel.app`), and add it under **Redirect URLs**.
 5. From **Project Settings → API**, copy the **Project URL** and the **anon public** key.
 
@@ -118,6 +118,7 @@ The backend contract (`/api/marker`) and the Supabase tables are plain JSON, so 
 - **Tables** from the AI become lists, because the editor doesn't have tables yet.
 - **Sync conflicts:** when two devices change one note, the device that uploads second keeps its version in place and the other version is saved as a copy named “… (from another device)”. Its markers stay with the original, so the copy is plain text. Marker conflicts merge (every message, answer and written version is kept).
 - **Accounts on shared devices:** each account has its own database on the device. Signing out keeps a copy for next time (unsynced changes upload on the next sign-in); “Sign out and remove from this device” deletes it, and is refused while changes are still waiting. Notes made while signed out are only added to an account when the student says so. Signing out while offline forgets the sign-in on the device, but can't revoke it on the server until the next online sign-out.
+- **Several tabs:** a note open in two tabs updates live in both. If both are typing in the same second, the other tab's version is kept as a copy.
 - **Markers whose passage is deleted** keep everything and show “Source removed”, with a button to put them back.
 - **Math** uses 64-digit precision. A few functions only exist for ordinary numbers, and those results are marked ≈.
 - **Leaderboard** points are decided by the server: 10 for “Got it”, 3 for “Again”, once per marker per day. It's still a friendly measure of effort, not proof of knowledge.

@@ -26,9 +26,19 @@ class FakeSupabase {
       const req = route.request(), url = new URL(req.url()), uid = this.userOf(req);
       this.calls.push(`${req.method()} ${url.pathname}`);
       if (this.down) return route.abort("internetdisconnected");
+      if (url.pathname === "/auth/v1/verify") {
+        const body = JSON.parse(req.postData() || "{}");
+        if (body.token !== "123456") return route.fulfill({ status: 403, json: { code: 403, error_code: "otp_expired", msg: "Token has expired or is invalid" } });
+        return route.fulfill({ json: FakeSupabase.session(this.codeUser) });
+      }
       if (url.pathname.startsWith("/auth/v1/")) return route.fulfill({ json: {} });
       if (!uid) return route.fulfill({ status: 401, json: { message: "JWT required" } });
       const json = (b, status = 200) => route.fulfill({ status, json: b, headers: { "content-type": "application/json" } });
+      if (url.pathname === "/rest/v1/rpc/delete_my_data") {
+        for (const k of Object.keys(this.rows)) for (const [id, r] of this.rows[k]) if (r.user_id === uid) this.rows[k].delete(id);
+        this.profiles.delete(uid);
+        return route.fulfill({ status: 204, body: "" });
+      }
       if (url.pathname === "/rest/v1/rpc/push_rows") {
         const { p_kind, p_rows } = JSON.parse(req.postData() || "{}");
         return json(this.pushRows(uid, p_kind, p_rows));

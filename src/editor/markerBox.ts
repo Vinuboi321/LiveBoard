@@ -45,6 +45,9 @@ export function closeBox() {
     const el = ws;
     if (el.contains(document.activeElement) && opener?.isConnected) opener.focus({ preventScroll: true });
     el.classList.add("closing");
+    // the fading copy must not answer to the live card's ids or take input while it animates out
+    el.inert = true;
+    el.querySelectorAll("[id]").forEach(x => x.removeAttribute("id"));
     setTimeout(() => el.remove(), 160);
   }
   ws = null;

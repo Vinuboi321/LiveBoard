@@ -15,9 +15,26 @@ Secrets go only in Vercel's environment variables. Anything starting with `VITE_
 ## Database
 
 1. Run `supabase/schema.sql` in the SQL editor. It is safe to run again; upgrades add what's missing.
-2. Check in **Database → Functions** that `push_rows`, `begin_ai_request` and `log_recall` exist.
+2. Check in **Database → Functions** that `push_rows`, `begin_ai_request`, `log_recall` and `delete_my_data` exist.
 3. Check in **Authentication → Policies** that `notes`, `markers` and `courses` have only a **read own rows** policy (writes go through `push_rows`), and that `recall_events` has no insert policy.
 4. Turn on Point-in-Time Recovery or daily backups (Supabase **Database → Backups**) before the pilot.
+
+## Sign-in email (required before any student can sign in)
+
+Supabase's built-in email only delivers to members of your Supabase team, and only 2 messages an hour. Students would never get a sign-in email.
+
+1. Set up a sending service (Resend, Postmark, Brevo or Amazon SES all work) and verify a domain you own.
+2. In Supabase **Authentication → Emails → SMTP Settings**, turn on custom SMTP with that service's details.
+3. In **Authentication → Rate Limits**, raise the email limit to what the pilot needs (for 20 students, 30 an hour is plenty).
+4. In **Authentication → Emails → Templates → Magic Link**, make sure the email shows the code as well as the link, for example:
+   `<p><a href="{{ .ConfirmationURL }}">Sign in to LiveBoard</a></p><p>Or type this code in LiveBoard: <b>{{ .Token }}</b></p>`
+   On iPad, a LiveBoard added to the home screen keeps its own storage, and links open in Safari instead, so students there need the code.
+
+## Before real students use it
+
+- **Privacy notice.** Students' notes are stored in Supabase, and the parts of a note near a marker are sent to Anthropic when they use AI. Say so in plain words, and say who to contact to delete data. Settings has "Delete my data from LiveBoard's servers"; you still need to delete the sign-in record yourself in **Authentication → Users**. If the pilot runs through a course, check with the instructor or the university about storing course material and student data.
+- **Lecture files.** Imported PDFs aren't uploaded, but their text is saved in notes. Ask the instructor before students import their slides.
+- **Custom domain.** If you put LiveBoard on your own domain, nothing changes in the app. If you point it at a self-hosted Supabase instead of `*.supabase.co`, add that address to `connect-src` in `vercel.json`.
 
 ## Release gates
 
@@ -32,6 +49,8 @@ Don't give the link to students until each of these is true.
 - [ ] Offline on a phone: write in a note, close the app fully, reopen offline, the writing is there; reconnect, it uploads (status line clears).
 - [ ] Import a real lecture PDF from the pilot course and place a few markers.
 - [ ] Download a backup, delete a note, restore the backup: the note returns.
+- [ ] Sign in on an iPad from the home-screen app by typing the code from the email.
+- [ ] Open the deployed site, then DevTools → Console: no "Content Security Policy" errors while importing, calculating and drawing a diagram.
 - [ ] Set `AI_DISABLED=true` and redeploy: markers still write, calculate and recall; AI says it's off. Remove it.
 
 ## Limits to start with

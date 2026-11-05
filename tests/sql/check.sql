@@ -86,4 +86,15 @@ insert into public.recall_events (class_id, points) values (:'cls', 20);
 \set ON_ERROR_STOP 1
 select (select points from public.class_leaderboard(:'cls') limit 1) = 10 as lb_ok \gset
 \if :lb_ok \else \echo 'FAIL direct point insert counted' \quit \endif
+-- account deletion removes only the caller's data
+set role authenticated;
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000b';
+select public.push_rows('notes', '[{"id":"nb1","base_rev":0,"data":{"title":"B"},"updated_at":1}]') is not null as b_wrote \gset
+set request.jwt.claim.sub = '00000000-0000-0000-0000-00000000000a';
+select public.delete_my_data();
+reset role;
+select (select count(*) from public.notes where user_id = '00000000-0000-0000-0000-00000000000a') = 0
+   and (select count(*) from public.notes where user_id = '00000000-0000-0000-0000-00000000000b') = 1
+   and (select count(*) from public.recall_events where user_id = '00000000-0000-0000-0000-00000000000a') = 0 as deleted_only_mine \gset
+\if :deleted_only_mine \else \echo 'FAIL account deletion' \quit \endif
 \echo 'ALL SQL CHECKS PASS'

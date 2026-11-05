@@ -26,7 +26,10 @@ async function pdfToHtml(file: File) {
     const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
   }
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise;
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise.catch((e: Error) => {
+    if (/password/i.test(e?.name + e?.message)) throw new Error("That PDF is password-protected. Save an unlocked copy and import that.");
+    throw new Error("That PDF couldn't be read. It may be damaged; try exporting it again.");
+  });
   const pages = Math.min(doc.numPages, 150);
   let html = "";
   for (let p = 1; p <= pages; p++) {

@@ -311,7 +311,22 @@ export async function initSync(h: Hooks): Promise<boolean> {
 export async function signIn(email: string) {
   if (!sb) throw new Error("Accounts aren't set up on this server yet.");
   const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } });
-  if (error) throw error;
+  if (error) throw new Error(/rate|seconds/i.test(error.message) ? "Too many sign-in emails just now. Wait a minute and try again." : error.message);
+}
+/** The email also carries a 6-digit code. Typing it signs in right here, which matters on iPad: links open in Safari,
+    not in the app added to the home screen (which keeps its own storage). */
+export async function verifyCode(email: string, code: string) {
+  if (!sb) throw new Error("Accounts aren't set up on this server yet.");
+  const { error } = await sb.auth.verifyOtp({ email, token: code.replace(/\s/g, ""), type: "email" });
+  if (error) throw new Error(/expired|invalid/i.test(error.message) ? "That code is wrong or has expired. Ask for a new email." : error.message);
+  // the SIGNED_IN event reopens LiveBoard as this account
+}
+
+/** Delete everything this account stored on the server (notes, markers, courses, profile, classes, recall points). */
+export async function deleteServerData() {
+  if (!sb || !session) throw new Error("Sign in first.");
+  const { error } = await sb.rpc("delete_my_data");
+  if (error) throw new Error("Couldn't delete your data: " + error.message);
 }
 
 /**

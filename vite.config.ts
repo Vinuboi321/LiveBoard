@@ -33,8 +33,9 @@ export default defineConfig({
       workbox: {
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
-        // Precache the app shell; diagram and PDF engines are cached the first time they're used.
-        globPatterns: ["index.html", "assets/index-*.{js,css}", "*.{svg,png,webmanifest}", "icons/*.png"],
+        // Precache the app shell plus the calculator and PDF import, so they work offline on first use; diagrams are cached once used.
+        globPatterns: ["index.html", "assets/index-*.{js,css}", "assets/mathWorker-*.js", "assets/pdf-*.js", "assets/pdf.worker.min-*.mjs", "*.{svg,png,webmanifest}", "icons/*.png"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         runtimeCaching: [
           { urlPattern: ({ url }) => url.pathname.startsWith("/assets/"), handler: "CacheFirst", options: { cacheName: "liveboard-assets", expiration: { maxEntries: 300 } } },
           { urlPattern: ({ url }) => url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com", handler: "StaleWhileRevalidate", options: { cacheName: "liveboard-fonts" } }

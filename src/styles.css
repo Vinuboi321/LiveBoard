@@ -2,7 +2,7 @@
    Markers are the only tool; their type sets their color, their mastery sets how full their dot is. */
 :root {
   --desk: #F4F2FF; --paper: #FFFFFF; --ink: #1B1638; --muted: #6B6590; --line: #E3DFF6;
-  --cobalt: #5B4BFF; --mark: #FFB800; --markwash: rgba(255, 184, 0, .34); --good: #12B679; --bad: #E5484D;
+  --cobalt: #5B4BFF; --oncobalt: #fff; --mark: #FFB800; --markwash: rgba(255, 184, 0, .34); --good: #12B679; --bad: #E5484D;
   --g1: #FF5A5F; --g2: #FF9F1C; --g3: #FFD23F; --g4: #2EC4B6; --g5: #3A86FF; --g6: #8338EC; --g7: #FF4FA3;
   --t-note: #3A86FF; --t-question: #F5A300; --t-explain: #8338EC; --t-math: #12B679; --t-visual: #FF4FA3; --t-link: #00A6C8; --t-reminder: #FF7A1A;
   --display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
@@ -14,7 +14,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --desk: #14112A; --paper: #221E3F; --ink: #F2EFFF; --muted: #A7A2CC; --line: #36305C;
-    --cobalt: #9488FF; --mark: #FFC53D; --markwash: rgba(255, 197, 61, .24); --good: #2FD08F; --bad: #FF6B6F;
+    --cobalt: #9488FF; --oncobalt: #14112A; --mark: #FFC53D; --markwash: rgba(255, 197, 61, .24); --good: #2FD08F; --bad: #FF6B6F;
     --t-note: #6FA6FF; --t-question: #FFC53D; --t-explain: #A77BFF; --t-math: #2FD08F; --t-visual: #FF77B9; --t-link: #3CCFEA; --t-reminder: #FF9A4D;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .35);
     color-scheme: dark;
@@ -22,7 +22,7 @@
 }
 :root[data-theme="dark"] {
     --desk: #14112A; --paper: #221E3F; --ink: #F2EFFF; --muted: #A7A2CC; --line: #36305C;
-    --cobalt: #9488FF; --mark: #FFC53D; --markwash: rgba(255, 197, 61, .24); --good: #2FD08F; --bad: #FF6B6F;
+    --cobalt: #9488FF; --oncobalt: #14112A; --mark: #FFC53D; --markwash: rgba(255, 197, 61, .24); --good: #2FD08F; --bad: #FF6B6F;
     --t-note: #6FA6FF; --t-question: #FFC53D; --t-explain: #A77BFF; --t-math: #2FD08F; --t-visual: #FF77B9; --t-link: #3CCFEA; --t-reminder: #FF9A4D;
     --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 10px 30px rgba(0, 0, 0, .35);
     color-scheme: dark;
@@ -72,7 +72,7 @@ button:disabled { cursor: default; opacity: .6; }
 .wk i.today { outline: 1.5px dashed var(--g1); outline-offset: 1px; }
 .scope { display: flex; background: var(--paper); border: 1px solid var(--line); border-radius: 99px; padding: 3px; gap: 2px; }
 .scope button { border: 0; background: none; border-radius: 99px; padding: 4px 11px; font-size: 13px; color: var(--muted); }
-.scope button[aria-pressed="true"] { background: var(--cobalt); color: #fff; }
+.scope button[aria-pressed="true"] { background: var(--cobalt); color: var(--oncobalt); }
 .recallbtn { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 99px; padding: 8px 8px 8px 16px; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--g6), var(--g7)); box-shadow: 0 8px 18px color-mix(in srgb, var(--g7) 35%, transparent); transition: transform .15s; }
 .recallbtn:hover:not(:disabled) { transform: translateY(-1px); }
 .recallbtn .cnt { background: rgba(255, 255, 255, .25); border-radius: 99px; min-width: 24px; padding: 1px 7px; font: 600 12px var(--mono); }
@@ -143,7 +143,7 @@ button:disabled { cursor: default; opacity: .6; }
 .infoin { display: flex; flex-direction: column; align-items: center; gap: 7px; animation: pop .38s cubic-bezier(.2, .9, .3, 1.3); width: 100%; }
 @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
 .band { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: color-mix(in srgb, var(--hc) 80%, var(--ink)); }
-.pill { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: #fff; padding: 4px 11px; border-radius: 99px; box-shadow: 0 4px 12px color-mix(in srgb, var(--hc) 40%, transparent); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pill { font: 700 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--hcink, #fff); padding: 4px 11px; border-radius: 99px; box-shadow: 0 4px 12px color-mix(in srgb, var(--hc) 40%, transparent); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .stats { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .stat { display: flex; align-items: baseline; gap: 4px; background: color-mix(in srgb, var(--hc) 12%, var(--paper)); border-radius: 10px; padding: 4px 9px; font: 11.5px var(--mono); color: var(--muted); }
 .stat b { font: 700 17px var(--display); color: var(--ink); }
@@ -155,7 +155,7 @@ button:disabled { cursor: default; opacity: .6; }
 .cdots span:first-child { margin-left: 0; }
 .cdots em { font: normal 11px var(--mono); color: var(--muted); margin-left: 7px; }
 .htitle { font: 700 clamp(16px, calc(var(--hub) * .058), 21px)/1.15 var(--display); letter-spacing: -.015em; text-wrap: balance; }
-.openlink { border: 0; background: var(--hc); color: #fff; font: 600 13px var(--display); padding: 6px 16px; border-radius: 99px; margin-top: 2px; box-shadow: 0 6px 14px color-mix(in srgb, var(--hc) 40%, transparent); transition: transform .15s; }
+.openlink { border: 0; background: var(--hc); color: var(--hcink, #fff); font: 600 13px var(--display); padding: 6px 16px; border-radius: 99px; margin-top: 2px; box-shadow: 0 6px 14px color-mix(in srgb, var(--hc) 40%, transparent); transition: transform .15s; }
 .openlink:hover { transform: translateY(-1px) scale(1.04); }
 .spinhint { font: 12px var(--mono); color: var(--muted); text-align: center; }
 .rtop { display: flex; align-items: center; gap: 8px; }
@@ -183,7 +183,7 @@ button:disabled { cursor: default; opacity: .6; }
 .tbtn { border: 1px solid var(--line); background: none; border-radius: 99px; padding: 4px 12px; font-size: 13px; color: var(--muted); }
 .tbtn:hover { color: var(--ink); }
 .tbtn.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
-.tbtn.back { background: var(--cobalt); color: #fff; border-color: var(--cobalt); }
+.tbtn.back { background: var(--cobalt); color: var(--oncobalt); border-color: var(--cobalt); }
 .warn { border-color: var(--bad) !important; color: var(--bad) !important; background: none !important; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; margin: 4px 0 10px; position: sticky; top: -16px; background: var(--paper); z-index: 5; }
 .toolbar button { border: 0; background: none; min-width: 34px; height: 32px; border-radius: 8px; font: 600 14px var(--display); color: var(--muted); }
@@ -193,7 +193,7 @@ button:disabled { cursor: default; opacity: .6; }
 .backlinks { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font: 12px var(--mono); color: var(--muted); margin-bottom: 8px; }
 .backlinks button { border: 1px solid color-mix(in srgb, var(--t-link) 50%, var(--line)); background: color-mix(in srgb, var(--t-link) 10%, var(--paper)); border-radius: 99px; padding: 2px 10px; font: 12px var(--display); color: var(--ink); }
 .hint { font: 12px var(--mono); color: var(--muted); margin-bottom: 18px; }
-.hint .plus { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--cobalt); color: #fff; font: 700 13px/1 var(--display); }
+.hint .plus { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--cobalt); color: var(--oncobalt); font: 700 13px/1 var(--display); }
 .editorwrap { position: relative; padding-right: 22px; }
 .rail { position: absolute; right: -8px; top: 0; bottom: 0; width: 18px; border-left: 1px dashed var(--line); }
 .rdot { position: absolute; left: 3px; width: 13px; height: 13px; border-radius: 50%; border: 2.5px solid var(--tc); background: var(--paper); padding: 0; transform: translateY(4px); }
@@ -245,10 +245,10 @@ button:disabled { cursor: default; opacity: .6; }
 .diagram-src { text-align: left; }
 
 .floatbtn { position: fixed; z-index: 800; border: 0; box-shadow: var(--shadow); }
-.floatbtn.place { background: var(--cobalt); color: #fff; border-radius: 99px; padding: 8px 14px 8px 11px; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+.floatbtn.place { background: var(--cobalt); color: var(--oncobalt); border-radius: 99px; padding: 8px 14px 8px 11px; font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
 .floatbtn.place[hidden] { display: none; }
 .pindot { width: 11px; height: 11px; border-radius: 50%; border: 2.5px solid #fff; }
-.floatbtn.plus { width: 30px; height: 30px; border-radius: 50%; background: var(--cobalt); color: #fff; font: 700 20px/1 var(--display); padding: 0; display: grid; place-items: center; }
+.floatbtn.plus { width: 30px; height: 30px; border-radius: 50%; background: var(--cobalt); color: var(--oncobalt); font: 700 20px/1 var(--display); padding: 0; display: grid; place-items: center; }
 
 /* Marker workspace: a card that opens out of its marker and floats over the page, like a note laid on top.
    Placed beside its marker on wide screens (draggable by the header); a floating card over the lower page on phones. */
@@ -379,7 +379,7 @@ details.src mark { background: color-mix(in srgb, var(--tc) 25%, transparent); c
 .row input, .row select, .field input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; background: var(--desk); }
 .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .btn { border: 1px solid var(--line); background: var(--paper); border-radius: 10px; padding: 8px 14px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-block; }
-.btn.primary { background: var(--cobalt); color: #fff; border-color: var(--cobalt); }
+.btn.primary { background: var(--cobalt); color: var(--oncobalt); border-color: var(--cobalt); }
 .btn.small { padding: 4px 10px; font-size: 12.5px; }
 .btn.danger { color: var(--bad); align-self: flex-start; }
 .clist { display: flex; flex-direction: column; gap: 6px; }
@@ -401,7 +401,7 @@ details.src mark { background: color-mix(in srgb, var(--tc) 25%, transparent); c
 .paper.dropping, .paper.dropping .ProseMirror { cursor: crosshair; }
 .paper.dropping .editorwrap { outline: 2px dashed color-mix(in srgb, var(--cobalt) 45%, transparent); outline-offset: 10px; border-radius: 8px; }
 .tbtn.drop { color: var(--cobalt); border-color: color-mix(in srgb, var(--cobalt) 40%, var(--line)); }
-.tbtn.drop.on { background: var(--cobalt); color: #fff; border-color: var(--cobalt); }
+.tbtn.drop.on { background: var(--cobalt); color: var(--oncobalt); border-color: var(--cobalt); }
 
 /* Strings between connected markers */
 .strings { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 0; }
@@ -510,3 +510,8 @@ button.moutlabel:hover, .moutsrc:hover { color: var(--tc, var(--ink)); }
 .examask label { display: grid; gap: 4px; font-size: 13px; flex: 1; }
 .examask input { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: inherit; }
 .updatebar { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); z-index: 80; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; box-shadow: 0 14px 40px -16px rgba(0,0,0,.35); font-size: 14px; max-width: calc(100vw - 24px); }
+
+/* Bigger touch targets for marker dots without making them look bigger */
+.pin:not(.free) { position: relative; }
+.pin:not(.free)::before, .rdot::before { content: ""; position: absolute; inset: -9px; border-radius: 50%; }
+@media (pointer: coarse) { .pin:not(.free)::before, .rdot::before { inset: -12px; } .pin.free::before { content: ""; position: absolute; inset: -10px; border-radius: 50%; } .wsgrab { min-height: 26px; } }

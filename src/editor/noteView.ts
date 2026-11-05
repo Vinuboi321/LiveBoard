@@ -54,7 +54,10 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   putNote(n, false);
   /** The server revision the editor's content is built on. If sync replaces the note underneath, a save keeps both versions. */
   let baseRev = n0.rev ?? 0;
+  /** The saved version the editor's content is built on; another tab or device saving a newer one counts as a change underneath. */
+  let baseAt = n0.updatedAt;
   let dirty = false;
+  const patch = (p: Partial<Note>) => { const done = patchNote(id, p); n = state.notes.get(id) || n; baseAt = n.updatedAt; return done; };
 
   const courses = liveCourses();
   const backlinks = liveMarkers().filter(m => m.type === "link" && m.linkNoteId === id && m.noteId !== id);
@@ -95,15 +98,16 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     if (!ed) return;
     dirty = false;
     const cur = state.notes.get(id);
-    if (cur && (cur.rev ?? 0) > baseRev && JSON.stringify(cur.doc) !== JSON.stringify(n.doc)) {
+    if (cur && ((cur.rev ?? 0) > baseRev || cur.updatedAt > baseAt) && JSON.stringify(cur.doc) !== JSON.stringify(n.doc)) {
       // Another device's version arrived while this one was being edited. Keep it as a copy, then save what's on screen.
       const t = Date.now();
       putNote({ ...cur, id: uid(), title: `${cur.title} (from another device)`.slice(0, 140), doc: stripMarkers(cur.doc), conflictOf: id, rev: undefined, createdAt: t, openedAt: t, updatedAt: t });
-      toast("This note also changed on another device. That version was saved as a copy.", 6000);
+      toast("This note also changed in another tab or device. That version was saved as a copy.", 6000);
     }
     baseRev = cur?.rev ?? baseRev;
-    patchNote(id, { doc: ed.getJSON(), html: null, plain: ed.getText({ blockSeparator: "\n" }).slice(0, 200000) });
-    n = state.notes.get(id) || n;
+    const doc = ed.getJSON();
+    n = { ...n, doc };
+    patch({ doc, html: null, plain: ed.getText({ blockSeparator: "\n" }).slice(0, 200000) });
     syncPassages();
     recordRevisions();
   }, 600);
@@ -117,6 +121,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     if (r.deleted) { toast("This note was deleted on another device."); goHome(); return; }
     if (dirty) return;
     baseRev = r.rev ?? baseRev;
+    baseAt = r.updatedAt;
     n = r;
     if (JSON.stringify(r.doc) !== JSON.stringify(ed.getJSON()) && r.doc) {
       const { from } = ed.state.selection;
@@ -176,7 +181,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     ],
     content: (n.doc as object) || n.html || "",
     editorProps: {
-      attributes: { class: "body", spellcheck: "true" },
+      attributes: { class: "body", spellcheck: "true", role: "textbox", "aria-multiline": "true", "aria-label": "Note text" },
       transformPastedHTML: html => html.replace(/data-(pin|marker|marker-output)="[^"]*"/g, "")
     },
     onUpdate: () => { save(); reconcilePins(id, pinIds()); layoutRail(); updateFloat(); },
@@ -193,8 +198,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   const sel = $("#courseSel", stage) as HTMLSelectElement, nc = $("#newCourse", stage) as HTMLInputElement;
   sel.onchange = () => {
     if (sel.value === "__new") { nc.hidden = false; nc.focus(); return; }
-    patchNote(id, { courseId: sel.value });
-    n = state.notes.get(id) || n;
+    patch({ courseId: sel.value });
     $("#cdot", stage)!.style.background = courseColor(n.courseId);
   };
   nc.onkeydown = async e => {
@@ -204,8 +208,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     const v = nc.value.trim();
     if (!v) return;
     const c = liveCourses().find(x => x.name.toLowerCase() === v.toLowerCase()) || (await newCourse(v));
-    await patchNote(id, { courseId: c.id });
-    n = state.notes.get(id) || n;
+    await patch({ courseId: c.id });
     sel.insertAdjacentHTML("afterbegin", `<option value="${c.id}">${esc(c.name)}</option>`);
     sel.value = c.id;
     nc.hidden = true;
@@ -214,7 +217,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   };
   nc.onblur = () => { if (!nc.value.trim()) { nc.hidden = true; sel.value = n.courseId; } };
   const title = $("#ptitle", stage) as HTMLInputElement;
-  title.oninput = () => { patchNote(id, { title: title.value.trim() || "Untitled note" }); n = state.notes.get(id) || n; };
+  title.oninput = () => { patch({ title: title.value.trim() || "Untitled note" }); };
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ed?.commands.focus("start"); } };
   armButton($("#delNote", stage)!, "Delete", "Tap again to delete", async () => { save.flush(); await deleteNote(id); toast("Note deleted."); goHome(); });
   stage.querySelectorAll<HTMLButtonElement>(".backlinks [data-open]").forEach(b => b.onclick = () => openNote(b.dataset.open!));

@@ -125,6 +125,23 @@ const BASE = process.env.BASE || "http://localhost:4173";
   ok(/too large/.test(await calc("99999!")), "huge factorials are refused instead of freezing the page");
   ok(/= 1\b/.test(await calc("9007199254740993 - 9007199254740992")), "big-integer math stays exact in the worker");
 
+  /* Two tabs editing the same note keep both edits */
+  await p.keyboard.press("Escape");
+  const noteHash = await p.evaluate(() => location.hash);
+  const p2 = await ctx.newPage();
+  await p2.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+  await p2.route("**/api/marker", r => r.fulfill({ json: { ai: false } }));
+  await p2.goto(BASE + "/" + noteHash);
+  await p2.waitForSelector("#editor .ProseMirror");
+  const typeEnd = async (pg, txt) => { await pg.evaluate(() => { const ps = document.querySelectorAll("#editor p"), last = ps[ps.length - 1]; const r = document.createRange(); r.selectNodeContents(last); r.collapse(false); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); document.querySelector("#editor .ProseMirror").focus(); }); await pg.keyboard.type(txt); await pg.waitForTimeout(900); };
+  await typeEnd(p, " FROM-TAB-ONE");
+  await typeEnd(p2, " FROM-TAB-TWO");
+  await p.waitForTimeout(400);
+  ok(/FROM-TAB-TWO/.test(await p.textContent("#editor")), "a note open in two tabs shows the other tab's edit");
+  const plain = await p.evaluate(h => new Promise(res => { const r = indexedDB.open("liveboard"); r.onsuccess = () => { const q = r.result.transaction("notes").objectStore("notes").get(h.replace("#note-", "")); q.onsuccess = () => res(q.result.plain); }; }), noteHash);
+  ok(/FROM-TAB-ONE/.test(plain) && /FROM-TAB-TWO/.test(plain), "and neither tab's edit is lost");
+  await p2.close();
+
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL SAFETY CHECKS PASS");
   process.exit(errs.length ? 1 : 0);

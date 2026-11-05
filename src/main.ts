@@ -6,7 +6,7 @@ import { openSettings } from "./settings";
 import { openSearch } from "./search";
 import { ensureStarterCourse, liveCourses, liveNotes, markersOf, newNote, note, onChange, openStore, putMarker, putMeta, putNote, state, deleteNote } from "./store";
 import { bootOwner, claimSignedOutNotes, initSync, migrateLegacyShared, push, signedOutNotes } from "./sync";
-import { $, debounce, toast } from "./util";
+import { $, debounce, esc, toast } from "./util";
 import { newMarker } from "./store";
 
 const stage = () => $("#stage")!;
@@ -178,7 +178,18 @@ function installUpdates() {
   });
 }
 
+/* Saving on the device failed (storage full, or blocked by the browser): say so, instead of failing silently. */
+addEventListener("unhandledrejection", e => {
+  const r = e.reason as { name?: string; inner?: { name?: string }; message?: string } | undefined;
+  const name = `${r?.name || ""} ${r?.inner?.name || ""}`;
+  if (/QuotaExceeded/.test(name)) toast("This device is out of storage space, so your latest change couldn't be saved. Free up space, then keep going.", 10000);
+  else if (/DatabaseClosed|InvalidState|UnknownError|Abort/.test(name)) toast("Couldn't save on this device just now. Reload the page; anything already saved is safe.", 8000);
+});
+
 boot().catch(err => {
   console.error(err);
-  stage().innerHTML = `<div class="fatal"><h2>LiveBoard couldn't start</h2><p>${String(err?.message || err)}</p><p>If you're in a private window, storage may be blocked. Try a normal window.</p></div>`;
+  const storage = /IndexedDB|MissingAPI|SecurityError|InvalidState|DatabaseClosed|Open|Quota/i.test(`${err?.name} ${err?.message}`);
+  stage().innerHTML = storage
+    ? `<div class="fatal"><h2>LiveBoard can't save on this browser</h2><p>LiveBoard keeps your notes on this device, and this browser is blocking that. This usually happens in a private window, or when a school or work policy turns off site storage.</p><p>Open LiveBoard in a normal window, or allow site data for this site in the browser's settings.</p></div>`
+    : `<div class="fatal"><h2>LiveBoard couldn't start</h2><p>Reload the page. If it keeps happening, your notes are still saved on this device; contact support with this message:</p><p class="muted small">${esc(String(err?.message || err)).slice(0, 300)}</p></div>`;
 });

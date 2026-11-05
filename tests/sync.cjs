@@ -156,6 +156,33 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
   ok(fake.all("notes", U3).some(r => r.data.title === "Before sign in"), "choosing Add uploads them to the account");
   ok((await C.textContent("#stage")).includes("Before sign in"), "and they show on the dial");
 
+  /* 5. Signing in with the emailed code (what iPad home-screen apps need), then deleting server data */
+  const D = await device();
+  fake.codeUser = "44444444-4444-4444-8444-444444444444";
+  await D.click("#settingsBtn");
+  await D.fill("#sEmail", "student@test.edu");
+  await D.click("#sIn button");
+  await D.waitForSelector("#sCode:not([hidden])");
+  await D.fill("#sCodeIn", "000000");
+  await D.click("#sCode button");
+  await D.waitForTimeout(600);
+  ok(/wrong or has expired/.test((await D.textContent("#toast")) || ""), "a wrong code is refused clearly");
+  await D.fill("#sCodeIn", "123 456");
+  await D.click("#sCode button");
+  await D.waitForLoadState("load");
+  await D.waitForTimeout(2000);
+  await D.waitForSelector("#dial");
+  ok(await D.evaluate(k => !!localStorage.getItem(k), KEY), "the emailed code signs the student in, inside the app");
+  await newNote(D, "Delete me", "Private thoughts.");
+  await D.waitForTimeout(2200);
+  ok(!!serverNote(fake.codeUser, "Delete me"), "their note uploads");
+  await home(D);
+  await D.click("#settingsBtn");
+  await D.click("#sDelServer"); await D.click("#sDelServer");
+  await D.waitForTimeout(2500);
+  ok(fake.all("notes", fake.codeUser).length === 0, "deleting server data removes the account's notes from the server");
+  ok(fake.all("notes", U1).length > 0, "and leaves other accounts alone");
+
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL SYNC CHECKS PASS");
   process.exit(errs.length ? 1 : 0);
