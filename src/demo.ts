@@ -1,4 +1,4 @@
-import { db, putCourse, putMarker, putMeta, putNote, state } from "./store";
+import { db, putCourse, putLocalMeta, putMarker, putMeta, putNote, state } from "./store";
 import type { Course, Marker, MarkerType, Mastery, Note, ThreadMsg } from "./types";
 import { DAY, H, dayKey, esc } from "./util";
 
@@ -14,8 +14,33 @@ const COURSES: [string, string, string][] = [
 interface M { id: string; text: string; type: MarkerType; free?: [number, number]; mastery?: Mastery; ago?: number; dueIn?: number; thread?: [ThreadMsg["role"], string, string?, string?][]; q?: string; a?: string; links?: string[]; remindIn?: number; out?: string }
 const pin = (m: M) => m.free ? `<span data-pin="${m.id}" data-dx="${m.free[0]}" data-dy="${m.free[1]}"></span>` : `<span data-marker="${m.id}">${esc(m.text)}</span><span data-pin="${m.id}"></span>`;
 
+/**
+  The preview keeps its sample notes in the browser, so on a later visit they'd have aged (nothing "recently opened",
+  everything in folders). Move the sample notes forward by however long it's been, so the preview always looks like
+  a student's live semester. Only sample notes (and the starter note) move; anything the viewer wrote keeps its times.
+*/
+async function freshenDemo() {
+  const now = Date.now();
+  const bio = state.notes.get("demo-n-bio");
+  const anchor = state.meta.demoAnchor ?? (bio ? bio.createdAt + 2 * H : now);
+  const shift = now - anchor;
+  if (shift < H) return;
+  const welcome = state.meta.welcomeId || [...state.notes.values()].find(n => n.title === "Start here: how markers work")?.id;
+  const isSample = (id: string) => id.startsWith("demo-") || id === welcome;
+  const notes = [...state.notes.values()].filter(n => isSample(n.id)).map(n => ({ ...n, createdAt: n.createdAt + shift, updatedAt: n.updatedAt + shift, openedAt: n.openedAt + shift }));
+  const markers = [...state.markers.values()].filter(m => isSample(m.noteId)).map(m => ({
+    ...m, createdAt: m.createdAt + shift, updatedAt: m.updatedAt + shift, due: m.due + shift, remindAt: m.remindAt ? m.remindAt + shift : m.remindAt,
+    thread: m.thread.map(t => ({ ...t, at: t.at + shift }))
+  }));
+  await db.transaction("rw", db.notes, db.markers, async () => { await db.notes.bulkPut(notes); await db.markers.bulkPut(markers); });
+  notes.forEach(n => state.notes.set(n.id, n));
+  markers.forEach(m => state.markers.set(m.id, m));
+  const days = [1, 2, 3, 4, 5].map(i => dayKey(now - i * DAY));
+  await putLocalMeta({ demoAnchor: now, studyDays: [...new Set([...state.meta.studyDays, ...days])].sort() });
+}
+
 export async function seedDemo() {
-  if ((state.meta.demoVersion || 0) >= 3) return;
+  if ((state.meta.demoVersion || 0) >= 3) { await freshenDemo(); return; }
   const now = Date.now();
   for (const [id, name, color] of COURSES) {
     const c: Course = { id, name, color, updatedAt: now };
@@ -136,6 +161,7 @@ export async function seedDemo() {
     await db.markers.put(rec);
   }
   const days = [1, 2, 3, 4, 5].map(i => dayKey(now - i * DAY));
+  await putLocalMeta({ demoAnchor: now });
   await putMeta({ demoSeeded: true, demoVersion: 3, studyDays: [...new Set([...state.meta.studyDays, ...days])], points: Math.max(state.meta.points, 58) });
 }
 

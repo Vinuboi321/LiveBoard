@@ -75,6 +75,7 @@ export interface Meta {
   seeded: boolean;
   demoSeeded?: boolean;
   demoVersion?: number;
+  demoAnchor?: number; // preview only: when the sample notes' times were last brought up to date
   ownerId?: string | null; // legacy (single shared database); kept so old copies can be moved to their account
   welcomeId?: string | null; // the starter note, not offered when moving signed-out notes into an account
   cursors?: Partial<Record<"notes" | "markers" | "courses", number>>; // last server sequence pulled

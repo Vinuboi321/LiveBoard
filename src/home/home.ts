@@ -142,9 +142,12 @@ function layout() {
   });
   const gaps = out.reduce((t, f, i) => t + (i ? (out[i - 1].b === f.b ? SAMEGAP : GAPDEG) : 0), 0) + GAPDEG;
   const tw = out.reduce((t, f) => t + f.w, 0) || 1, unit = Math.min(70 / WMAX, (360 - gaps) / tw);
+  // Few notes (say, nothing opened in the last day) would bunch into one arc; spread the spare angle evenly
+  // so they always surround the hub. Item sizes stay the same; only the spacing grows.
+  const extra = out.length > 1 ? Math.max(0, 360 - gaps - tw * unit) / out.length : 0;
   let a = out.length ? -out[0].w * unit / 2 : 0;
   items = out.map((f, i) => {
-    if (i) a += out[i - 1].b === f.b ? SAMEGAP : GAPDEG;
+    if (i) a += (out[i - 1].b === f.b ? SAMEGAP : GAPDEG) + extra;
     const span = f.w * unit, it: Item = { ...f, span, ang: a + span / 2, W: 0, x: 0, y: 0, near: 0 };
     a += span;
     return it;
