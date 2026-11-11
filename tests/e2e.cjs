@@ -303,7 +303,7 @@ const MOCK = intent => {
     await p.waitForSelector("#editor .pin");
     await p.waitForTimeout(700);
     check((await p.$$("#pfp .fp i")).length === 1 && (await p.getAttribute("#pfp .fp i", "data-mastery")) === "0", "the note shows its memory fingerprint");
-    await p.click("#testBtn");
+    await p.click("#moreBtn"); await p.click("#testStart");
     await p.waitForTimeout(450); // the cover fades in
     check(await p.evaluate(() => getComputedStyle(document.querySelector("#editor .mk")).color === "rgba(0, 0, 0, 0)" && !document.querySelector("#editor .ProseMirror").isContentEditable), "Test me covers marked text and locks the note");
     await p.click("#editor .mk");

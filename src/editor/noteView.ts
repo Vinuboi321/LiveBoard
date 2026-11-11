@@ -92,12 +92,22 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
           <select id="courseSel" aria-label="Course">${courses.map(c => `<option value="${c.id}" ${c.id === n.courseId ? "selected" : ""}>${esc(c.name)}</option>`).join("")}<option value="__new">+ New course…</option></select>
           <input id="newCourse" placeholder="Course name" hidden maxlength="32"></label>
         <span class="spacer"></span>
-        <button class="tbtn test" id="testBtn" aria-pressed="false" title="Hide every marked passage and check what you remember" hidden>Test me</button>
-        <button class="tbtn lostcapture" id="captureLost" title="Capture confusion at your selection or cursor">◌ Lost me here</button>
-        <button class="tbtn drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page">+ Marker</button>
-        <button class="tbtn ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Show classic formatting tools">Aa</button>
-        <span class="nmwrap"><button class="tbtn" id="moreBtn" aria-label="Outline, pictures, print and export" aria-expanded="false" aria-controls="noteMenu" title="Outline, pictures, print and export">•••</button><div class="notemenu" id="noteMenu" hidden></div></span>
-        <button class="tbtn" id="delNote">Delete</button>
+        <button class="tbtn test" id="testBtn" aria-pressed="false" title="Leave Test me" hidden>Test me</button>
+        <div class="big3" role="group" aria-label="Note tools">
+          <button class="b3 drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page"><i class="b3dot" aria-hidden="true"></i><span>Marker</span></button>
+          <button class="b3 aa ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Text formatting tools"><b aria-hidden="true">Aa</b><span>Format</span></button>
+          <span class="nmwrap"><button class="orb" id="moreBtn" aria-label="Menu" aria-expanded="false" aria-controls="noteMenu" aria-haspopup="true"><span class="orblabel" aria-hidden="true">Menu</span><i class="orbring" aria-hidden="true"></i><i class="orbcore" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></i><i class="orbdue" aria-hidden="true"></i></button>
+            <div class="notemenu" id="noteMenu" role="menu" hidden>
+              <div id="noteMenuTop"></div>
+              <div class="nmquick">
+                <button class="nmtile lost" id="captureLost" data-close title="Capture confusion at your selection or cursor"><i aria-hidden="true">◌</i><b>Lost me here</b><small>Flag the spot that confused you</small></button>
+                <button class="nmtile test" id="testStart" data-close hidden><i aria-hidden="true">◐</i><b>Test me</b><small>Hide what you marked and recall it</small></button>
+                <button class="nmtile pic" data-act="picture" data-close><i aria-hidden="true">▣</i><b>Picture</b><small>Or paste a screenshot</small></button>
+              </div>
+              <div id="noteMenuDyn"></div>
+              <div class="nmdanger"><button id="delNote">Delete note</button></div>
+            </div></span>
+        </div>
       </div>
       <div class="toolbar" id="toolbar" ${state.meta.showTools ? "" : "hidden"}>${TOOLS.map((t, i) => `<button data-i="${i}" title="${t[1]}" aria-label="${t[1]}">${esc(t[0])}</button>`).join("")}</div>
       <input class="ptitle" id="ptitle" value="${esc(n.title)}" aria-label="Title" maxlength="140" placeholder="Untitled note">
@@ -293,7 +303,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   title.oninput = () => { patch({ title: title.value.trim() || "Untitled note" }); };
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ed?.commands.focus("start"); } };
   bindNoteMenu($("#moreBtn", stage)!, $("#noteMenu", stage)!, () => note(id), () => void pickPictures());
-  armButton($("#delNote", stage)!, "Delete", "Tap again to delete", async () => { save.flush(); await deleteNote(id); toast("Note deleted."); goHome(); });
+  armButton($("#delNote", stage)!, "Delete note", "Tap again to delete this note", async () => { save.flush(); await deleteNote(id); toast("Note deleted."); goHome(); });
   stage.querySelectorAll<HTMLButtonElement>(".backlinks [data-open]").forEach(b => b.onclick = () => openNote(b.dataset.open!));
 
   const toolsBtn = $("#toolsBtn", stage)!, toolbar = $("#toolbar", stage)!;
@@ -582,6 +592,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     updateFloat();
   }
   testBtn.onclick = () => setTesting(!testing);
+  ($("#testStart", stage) as HTMLButtonElement).onclick = () => setTesting(true);
   function revealInTest(mid: string, at: HTMLElement) {
     pill?.remove(); pill = null;
     if (shown.has(mid)) return;
@@ -700,7 +711,11 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     const pfp = $("#pfp");
     if (pfp) pfp.innerHTML = fingerprint(id, 24);
     const tb = $("#testBtn");
-    if (tb) tb.hidden = !testing && !ms.some(m => m.text && !m.detachedAt);
+    // Test me starts from the menu; the header only shows it while a test is running, as the way out
+    if (tb) tb.hidden = !testing;
+    const ts = $("#testStart");
+    if (ts) ts.hidden = testing || !ms.some(m => m.text && !m.detachedAt);
+    $("#moreBtn")?.classList.toggle("has-due", ms.some(m => !m.detachedAt && !m.recallOff && m.due <= Date.now()));
     const hint0 = $("#hint");
     if (hint0) hint0.hidden = ms.length > 0; // the how-to line is for a note with no markers yet
     if (testing) paintTest();

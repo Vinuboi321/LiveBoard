@@ -1,4 +1,4 @@
-import { courseName } from "../store";
+import { courseName, markersOf } from "../store";
 import type { Note } from "../types";
 import { $, esc, toast } from "../util";
 
@@ -53,31 +53,30 @@ export function noteToMarkdown(title: string, course: string, root: HTMLElement)
 
 export function bindNoteMenu(btn: HTMLElement, menu: HTMLElement, getNote: () => Note | undefined, addPicture?: () => void) {
   const editorEl = () => document.querySelector<HTMLElement>("#editor .ProseMirror");
-  const close = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  const close = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); removeEventListener("resize", place); watch?.disconnect(); };
   const md = () => { const n = getNote(), e = editorEl(); return n && e ? noteToMarkdown(($("#ptitle") as HTMLInputElement | null)?.value || n.title, courseName(n.courseId), e) : ""; };
   const draw = () => {
     const heads = [...(editorEl()?.querySelectorAll<HTMLElement>("h1, h2, h3") || [])].filter(h => h.textContent?.trim());
     const words = (editorEl()?.innerText.trim().match(/\S+/g) || []).length;
-    menu.innerHTML = `<div class="nmlabel">Outline</div>
-      ${heads.length ? `<div class="nmoutline">${heads.map((h, i) => `<button data-h="${i}" class="lv${h.tagName[1]}">${esc(h.textContent!.trim().slice(0, 70))}</button>`).join("")}</div>` : `<p class="nmempty">Headings in this note show up here, so you can jump around a long lecture.</p>`}
-      <div class="nmlabel">Add</div>
-      <button data-act="picture"><b>Picture</b><small>Or paste a screenshot, or drop a file on the page</small></button>
+    const dyn = menu.querySelector<HTMLElement>("#noteMenuDyn") || menu, top = menu.querySelector<HTMLElement>("#noteMenuTop");
+    const n0 = getNote(), mk = n0 ? markersOf(n0.id).filter(m => !m.detachedAt) : [], due = mk.filter(m => !m.recallOff && m.due <= Date.now()).length;
+    // which heading you're reading now: the last one above the middle of the screen
+    const here = heads.reduce((k, h, i) => (h.getBoundingClientRect().top < innerHeight * 0.45 ? i : k), -1);
+    if (top) top.innerHTML = `<div class="nmstats"><span><b>${words.toLocaleString()}</b>word${words === 1 ? "" : "s"}</span><span><b>${Math.max(1, Math.round(words / 220))}</b>min read</span><span><b>${mk.length}</b>marker${mk.length === 1 ? "" : "s"}</span><span class="${due ? "due" : ""}"><b>${due}</b>due</span></div>`;
+    dyn.innerHTML = `<div class="nmlabel">Outline</div>
+      ${heads.length ? `<div class="nmoutline">${heads.map((h, i) => `<button data-h="${i}" class="lv${h.tagName[1]}${i === here ? " here" : ""}" style="--i:${Math.min(i, 12)}">${esc(h.textContent!.trim().slice(0, 70))}</button>`).join("")}</div>` : `<p class="nmempty">Headings in this note show up here, so you can jump around a long lecture.</p>`}
       <div class="nmlabel">Take it with you</div>
-      <button data-act="print"><b>Print or save as PDF</b><small>Clean page, no app chrome</small></button>
-      <button data-act="copy"><b>Copy as Markdown</b><small>Paste into a doc, email or chat</small></button>
-      <button data-act="file"><b>Download .md file</b><small>Opens anywhere</small></button>
-      <div class="nmfoot">${words.toLocaleString()} word${words === 1 ? "" : "s"} · about ${Math.max(1, Math.round(words / 220))} min read</div>`;
-    menu.querySelectorAll<HTMLButtonElement>("[data-h]").forEach(b => b.onclick = () => {
+      <div class="nmtake"><button data-act="print" title="Clean page, no app chrome"><i aria-hidden="true">⎙</i>Print / PDF</button><button data-act="copy" title="Paste into a doc, email or chat"><i aria-hidden="true">⧉</i>Copy Markdown</button><button data-act="file" title="A .md file that opens anywhere"><i aria-hidden="true">↓</i>Download</button></div>`;
+    dyn.querySelectorAll<HTMLButtonElement>("[data-h]").forEach(b => b.onclick = () => {
       const h = heads[Number(b.dataset.h)];
       close();
       h.scrollIntoView({ block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       h.classList.remove("jumped"); void h.offsetWidth; h.classList.add("jumped");
       setTimeout(() => h.classList.remove("jumped"), 1600);
     });
-    menu.querySelectorAll<HTMLButtonElement>("[data-act]").forEach(b => b.onclick = async () => {
+    dyn.querySelectorAll<HTMLButtonElement>("[data-act]").forEach(b => b.onclick = async () => {
       const act = b.dataset.act;
       close();
-      if (act === "picture") return void addPicture?.();
       if (act === "print") return void setTimeout(() => window.print(), 60);
       const text = md();
       if (!text) return;
@@ -92,7 +91,32 @@ export function bindNoteMenu(btn: HTMLElement, menu: HTMLElement, getNote: () =>
       toast("Markdown file downloaded.");
     });
   };
-  btn.onclick = e => { e.stopPropagation(); if (menu.hidden) { draw(); menu.hidden = false; btn.setAttribute("aria-expanded", "true"); } else close(); };
+  /** Keep the whole menu on screen whatever the window size: it hangs under the button, slid left or right as far as
+   *  it needs to, and scrolls inside itself when the window is short. */
+  const place = () => {
+    const wrap = btn.parentElement!.getBoundingClientRect(), b = btn.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = Math.round(visualViewport?.height || innerHeight);
+    const w = Math.min(340, vw - 16);
+    const left = Math.max(8, Math.min(vw - w - 8, b.right - w));
+    menu.style.width = w + "px";
+    menu.style.left = left - wrap.left + "px"; menu.style.right = "auto";
+    menu.style.top = b.bottom - wrap.top + 10 + "px";
+    menu.style.maxHeight = Math.max(200, vh - b.bottom - 22) + "px";
+    menu.style.setProperty("--ox", Math.round(b.left + b.width / 2 - left) + "px"); // it unfolds from the button
+  };
+  // the header can re-wrap while the menu is open (a window resize, a rotation, fonts arriving): follow the button
+  const watch = typeof ResizeObserver === "function" ? new ResizeObserver(() => { if (!menu.hidden) place(); }) : null;
+  const open = () => {
+    draw(); menu.hidden = false; btn.setAttribute("aria-expanded", "true");
+    place(); requestAnimationFrame(place);
+    addEventListener("resize", place);
+    const head = btn.closest(".ptop");
+    if (head) watch?.observe(head);
+  };
+  btn.onclick = e => { e.stopPropagation(); if (menu.hidden) open(); else close(); };
+  // the tiles that live in the menu permanently (Lost me here, Test me, Picture) close it once pressed
+  menu.querySelectorAll<HTMLElement>("[data-close]").forEach(x => x.addEventListener("click", () => close()));
+  const picTile = menu.querySelector<HTMLElement>('.nmquick [data-act="picture"]');
+  if (picTile) picTile.onclick = () => { close(); addPicture?.(); };
   menu.addEventListener("click", e => e.stopPropagation());
   const away = () => { if (!btn.isConnected) return document.removeEventListener("click", away); close(); };
   document.addEventListener("click", away);

@@ -40,15 +40,28 @@ export function toast(msg: string, ms = 2800) {
 /** A button that needs a second tap within 3 seconds before it acts. */
 export function armButton(btn: HTMLElement, idleLabel: string, armedLabel: string, action: () => void) {
   let timer: number | null = null;
+  const away = (e: Event) => { if (!btn.contains(e.target as Node)) disarm(); };
+  const esc2 = (e: KeyboardEvent) => { if (e.key === "Escape") disarm(); };
+  // Arming asks "are you sure?". Anything other than a second press answers no: a tap or click anywhere else,
+  // Escape, or three seconds passing all put the button back the way it was.
+  function disarm() {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    btn.textContent = idleLabel;
+    btn.classList.remove("warn");
+    document.removeEventListener("pointerdown", away, true);
+    document.removeEventListener("keydown", esc2, true);
+  }
   btn.addEventListener("click", () => {
     if (timer === null) {
       btn.textContent = armedLabel;
       btn.classList.add("warn");
-      timer = window.setTimeout(() => { timer = null; btn.textContent = idleLabel; btn.classList.remove("warn"); }, 3000);
+      timer = window.setTimeout(disarm, 3000);
+      document.addEventListener("pointerdown", away, true);
+      document.addEventListener("keydown", esc2, true);
       return;
     }
-    clearTimeout(timer);
-    timer = null;
+    disarm();
     action();
   });
 }

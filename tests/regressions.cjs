@@ -220,7 +220,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.waitForSelector("#editor .ProseMirror");
   await p.click("#editor .ProseMirror");
   await p.keyboard.type("Velocity and acceleration are not the same.");
-  await p.click("#captureLost");
+  await p.click("#moreBtn"); await p.click("#captureLost");
   await p.waitForSelector("#editor .pin");
   ok(!(await p.$(".mws:not(.closing)")), "Lost me here captures a point without interrupting note taking");
   await p.click("#editor .pin");
@@ -367,6 +367,28 @@ const BASE = process.env.BASE || "http://localhost:4173";
   });
   await p.waitForFunction(() => /pasted words/.test(document.querySelector("#editor").textContent));
   ok((await p.$$("#editor img")).length === 1 && !(await p.$("#editor img:not([src^='data:image/'])")), "pasting a web page keeps its words but never an image that loads from the web");
+
+  // The note header: three tools on the page, everything else in the menu, which always opens fully on screen.
+  ok((await p.$$(".big3 > .b3, .big3 .orb")).length === 3 && !(await p.isVisible("#delNote")), "the header shows Marker, Format and Menu; Delete lives in the menu");
+  for (const w of [1280, 700, 520, 380]) {
+    await p.setViewportSize({ width: w, height: 760 });
+    const orbAt = await p.evaluate(() => Math.round(document.querySelector("#moreBtn").getBoundingClientRect().left));
+    await p.hover("#moreBtn"); await p.waitForTimeout(350);
+    ok(orbAt === await p.evaluate(() => Math.round(document.querySelector("#moreBtn").getBoundingClientRect().left)) && (await p.evaluate(() => getComputedStyle(document.querySelector(".orblabel")).opacity)) > "0.5", `resting on the menu button says "Menu" without moving anything (${w}px)`);
+    await p.click("#moreBtn"); await p.waitForSelector("#noteMenu:not([hidden])");
+    await p.waitForTimeout(450);
+    const box = await p.evaluate(() => { const r = document.querySelector("#noteMenu").getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, vw: document.documentElement.clientWidth, vh: innerHeight }; });
+    ok(box.l >= 0 && box.r <= box.vw + 1 && box.b <= box.vh + 1, `the menu opens fully on screen at ${w}px wide (${Math.round(box.l)}–${Math.round(box.r)} of ${box.vw})`);
+    await p.keyboard.press("Escape");
+  }
+  await p.setViewportSize({ width: 1280, height: 800 });
+  await p.click("#moreBtn");
+  await p.click("#delNote");
+  ok(/Tap again/.test(await p.textContent("#delNote")), "Delete asks for a second tap");
+  await p.click("#noteMenuTop");
+  ok((await p.textContent("#delNote")) === "Delete note", "tapping anywhere else cancels the delete");
+  await p.click("#delNote"); await p.keyboard.press("Escape");
+  ok(await p.evaluate(() => document.querySelector("#delNote").textContent === "Delete note") && !!(await p.$("#ptitle")), "Escape cancels it too, and the note is still there");
 
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL REGRESSIONS PASS");

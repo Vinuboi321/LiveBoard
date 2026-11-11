@@ -147,7 +147,7 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
   ok(/Edited on B/.test(await A.textContent("#editor")), "the open editor on device A shows the merged result without a reload");
 
   // An unfinished Journey is a synced marker record, not an in-memory editor buffer.
-  await A.click('#captureLost');
+  await A.click('#moreBtn'); await A.click('#captureLost');
   await A.click('#editor .pin');
   await A.click('[data-tab="journey"]');
   await A.fill('#thoughtBefore','I used to confuse the two stages.');
