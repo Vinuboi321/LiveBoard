@@ -1,6 +1,7 @@
 import { Mark, Node, mergeAttributes } from "@tiptap/core";
 import { state } from "../store";
 import { isDark } from "../theme";
+import { PIC_SRC } from "./picture";
 
 /* The marked passage: a faint highlight in the marker's type color. */
 export const MarkerMark = Mark.create({
@@ -165,6 +166,69 @@ export const MarkerOutput = Node.create({
         contentDOM: content,
         update(n) { if (n.type !== cur.type) return false; cur = n; render(); return true; },
         ignoreMutation: m => !content.contains(m.target as globalThis.Node) || (m.type === "attributes" && m.target === dom)
+      };
+    };
+  }
+});
+
+/* A picture in the note: a pasted screenshot, a dropped file, a photo of the board. Stored inline (see picture.ts)
+   and never loaded from a web address. Select it to change its size, describe it, or remove it. */
+export const Picture = Node.create({
+  name: "picture",
+  group: "block",
+  atom: true,
+  draggable: true,
+  selectable: true,
+  addAttributes() {
+    return {
+      src: { default: "", parseHTML: el => { const v = el.getAttribute("src") || ""; return PIC_SRC.test(v) ? v : ""; }, renderHTML: a => (PIC_SRC.test(a.src) ? { src: a.src } : {}) },
+      alt: { default: "", parseHTML: el => (el.getAttribute("alt") || "").slice(0, 300), renderHTML: a => ({ alt: a.alt || "" }) },
+      w: { default: "m", parseHTML: el => (["s", "m", "l"].includes(el.getAttribute("data-w") || "") ? el.getAttribute("data-w") : "m"), renderHTML: a => ({ "data-w": a.w }) }
+    };
+  },
+  parseHTML() { return [{ tag: 'img[src^="data:image/"]' }]; },
+  renderHTML({ HTMLAttributes }) { return ["img", mergeAttributes(HTMLAttributes, { class: "pic" })]; },
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      let cur = node;
+      const dom = document.createElement("figure");
+      dom.className = "pic"; dom.contentEditable = "false";
+      const img = document.createElement("img"), bar = document.createElement("div"), cap = document.createElement("figcaption");
+      img.draggable = false; img.decoding = "async";
+      bar.className = "picbar";
+      const set = (attrs: Record<string, string>) => { const pos = getPos(); if (typeof pos === "number") editor.chain().setNodeSelection(pos).updateAttributes("picture", attrs).run(); };
+      const paint = () => {
+        if (PIC_SRC.test(cur.attrs.src)) img.src = cur.attrs.src; else img.removeAttribute("src");
+        img.alt = cur.attrs.alt || "";
+        dom.dataset.w = cur.attrs.w;
+        cap.textContent = cur.attrs.alt || ""; cap.hidden = !cur.attrs.alt;
+        bar.innerHTML = `<span role="group" aria-label="Picture size">${([["s", "Small"], ["m", "Medium"], ["l", "Full"]] as const).map(([k, l]) => `<button type="button" data-w="${k}" aria-pressed="${cur.attrs.w === k}">${l}</button>`).join("")}</span><button type="button" data-do="cap">${cur.attrs.alt ? "Edit caption" : "Caption"}</button><button type="button" data-do="del" aria-label="Remove picture">Remove</button>`;
+      };
+      bar.onmousedown = e => e.preventDefault(); // keep the picture selected while pressing its buttons
+      bar.onclick = e => {
+        const b = (e.target as Element).closest<HTMLElement>("button");
+        if (!b) return;
+        if (b.dataset.w) return set({ w: b.dataset.w });
+        if (b.dataset.do === "del") { const pos = getPos(); if (typeof pos === "number") editor.chain().focus().deleteRange({ from: pos, to: pos + cur.nodeSize }).run(); return; }
+        // caption: an inline field in the bar, so there's no dialog to dismiss
+        bar.innerHTML = `<input type="text" maxlength="300" placeholder="What is this a picture of?" aria-label="Caption"><button type="button" data-do="ok">Done</button>`;
+        const inp = bar.querySelector("input")!;
+        inp.value = cur.attrs.alt || "";
+        inp.onmousedown = ev => ev.stopPropagation();
+        const done = () => set({ alt: inp.value.trim() });
+        inp.onkeydown = ev => { ev.stopPropagation(); if (ev.key === "Enter") { ev.preventDefault(); done(); } if (ev.key === "Escape") paint(); };
+        bar.querySelector<HTMLElement>('[data-do="ok"]')!.onclick = ev => { ev.stopPropagation(); done(); };
+        inp.focus();
+      };
+      dom.append(img, cap, bar);
+      paint();
+      return {
+        dom,
+        update: n => { if (n.type.name !== "picture") return false; cur = n; paint(); return true; },
+        selectNode: () => dom.classList.add("on"),
+        deselectNode: () => { dom.classList.remove("on"); paint(); },
+        stopEvent: e => !!(e.target as Element | null)?.closest?.(".picbar"),
+        ignoreMutation: () => true
       };
     };
   }

@@ -48,6 +48,7 @@ let three = false;      // while it plays, cards float above the tilted dial and
 let swipeNext = false;  // the next note opens with the page swiping away (set by the marker cards under the dial)
 /** True once, right after a marker card asked for the swipe. */
 export const takeSwipe = () => { const s = swipeNext; swipeNext = false; return s; };
+let pendingRecall: { ids: string[]; label: string } | null = null; // a quiz to start as soon as the dial is up (the exit ticket)
 let diving = false;     // a note is dropping into the hub: the dial stops responding until the page opens
 const off: (() => void)[] = [];
 
@@ -329,6 +330,7 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
       }
     }
     introduced = true;
+    if (pendingRecall) setTimeout(() => { if (alive) runPendingRecall(); }, 420);
   }
   lastDrawn = null;
   if (R) $("#dial")!.classList.add("recall");
@@ -659,6 +661,18 @@ function bindDial() {
 
 /* ---------- recall in the hub ---------- */
 /** Start a recall session: what's due in the chosen scope, or a given set of markers (cramming for one course). */
+/** Quiz these markers on the dial, now if it's showing or as soon as it next is. `label` names the run ("Exit ticket"). */
+export function queueRecall(ids: string[], label: string) {
+  pendingRecall = { ids, label };
+  if (alive && $("#dial") && !R) runPendingRecall();
+}
+function runPendingRecall() {
+  const p = pendingRecall;
+  pendingRecall = null;
+  if (!p || R) return;
+  const ms = p.ids.map(id => state.markers.get(id)).filter((m): m is Marker => !!m && !m.deleted && recallable(m));
+  if (ms.length) startRecall(ms, p.label);
+}
 function startRecall(custom?: Marker[], cram: string | null = null) {
   const q = custom || queue();
   if (!q.length) return;
@@ -696,7 +710,7 @@ function showRecall() {
   const strong = cmp ? cmp.total > 0 && cmp.hit / cmp.total >= 0.6 : true;
   const flip = R.revealed && !R.flipped; // the card turns over once, when the answer is first shown
   if (R.revealed) R.flipped = true;
-  el.innerHTML = `<div class="infoin${flip ? " flip" : ""}"><div class="rtop"><span class="pill" style="background:${courseColor(n.courseId)}">${R.cram ? "Cram" : "Recall"} ${R.i + 1} of ${R.queue.length}</span><button class="rx" aria-label="End recall" title="End recall (Esc)">×</button></div>
+  el.innerHTML = `<div class="infoin${flip ? " flip" : ""}"><div class="rtop"><span class="pill" style="background:${courseColor(n.courseId)}">${R.cram === "Exit ticket" ? "Exit ticket" : R.cram ? "Cram" : "Recall"} ${R.i + 1} of ${R.queue.length}</span><button class="rx" aria-label="End recall" title="End recall (Esc)">×</button></div>
     <div class="rq">${esc(q)}</div><div class="rsrc">${esc(courseName(n.courseId))} · ${esc(n.title)}</div>
     ${R.revealed
       ? `${R.typed ? `<div class="ryou"><small>You wrote</small>${esc(R.typed)}</div>` : ""}
@@ -761,7 +775,7 @@ function showDone() {
   const cols = ["--g1", "--g2", "--g3", "--g4", "--g5", "--g6", "--g7"], s = streak();
   const shaky = [...new Set(R!.missed)].map(id => state.markers.get(id)).filter((m): m is Marker => !!m).slice(0, 2);
   el.innerHTML = `<div class="infoin"><div class="burst" aria-hidden="true">${[...Array(22)].map((_, i) => { const a = (i / 22) * Math.PI * 2, r = 70 + (i % 4) * 22; return `<i style="background:var(${cols[i % 7]});--x:${Math.cos(a) * r}px;--y:${Math.sin(a) * r}px;--d:${(i % 5) * 40}ms"></i>`; }).join("")}</div>
-    <span class="pill" style="background:var(--g1)">${R!.cram ? "Cram done" : "Recall done"}</span><div class="donebig">${s} day${s === 1 ? "" : "s"}</div>
+    <span class="pill" style="background:var(--g1)">${R!.cram === "Exit ticket" ? "Exit ticket done" : R!.cram ? "Cram done" : "Recall done"}</span><div class="donebig">${s} day${s === 1 ? "" : "s"}</div>
     <div class="rsrc">${R!.got} of ${R!.queue.length} right · streak kept</div>
     ${shaky.length ? `<div class="shaky"><small>Still shaky · back in 10 minutes</small>${shaky.map(m => `<button data-shaky="${m.id}">${esc((m.recallQ || m.text || "A marker").slice(0, 46))}</button>`).join("")}</div>` : ""}
     <button class="openlink" id="doneBtn">Back to notes</button></div>`;

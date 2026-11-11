@@ -13,6 +13,8 @@ Updated November 11, 2026. Teacher-side work is outside this scope.
 - Sync transaction guards: newer local edits survive upload acknowledgments and remote/conflict application; queued writes retain acknowledged server revisions.
 - Deterministic race regression tests, plus browser, backup and cross-device Journey coverage.
 
+- Pictures in notes (paste, drop or pick; shrunk on device, stored inline, never fetched from the web), an elastic spring-driven marker resize, study sessions with an exit ticket, and a note outline with print and Markdown export.
+
 ## Milestones and remaining gates
 
 | Milestone | State | Still needed |

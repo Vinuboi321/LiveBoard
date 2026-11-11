@@ -1,5 +1,5 @@
 import { bindJourney, journeyHTML, compareMarker, closeComparison } from "./journey";
-import { bindResize, markerSize } from "./resizeCard";
+import { bindResize, endResize, markerSize, onCardSize } from "./resizeCard";
 import { aiHealth, askMarker, evaluate, localIntent, type LocalAction } from "../ai";
 import { mdToHtml } from "../md";
 import { course, courseName, liveMarkers, liveNotes, newMarker, newNote, note, putCourse, putMarker, putNote, state, onChange } from "../store";
@@ -70,6 +70,7 @@ let opener: HTMLElement | null = null; // focus returns here when the card close
 export function closeBox() {
   closeComparison();
   clearInterval(promptTimer);
+  endResize();
   saveDraft.flush();
   if (ws) {
     const el = ws;
@@ -296,6 +297,7 @@ function bindCommon() {
   $("#mClose", ws)!.onclick = closeBox;
   $("#mCompare", ws)!.onclick = () => { saveDraft.flush(); if(current) compareMarker(state.markers.get(current.id) || current); };
   bindDrag();
+  onCardSize(null); // the tab that's about to bind sets its own
   bindResize(ws, () => { moved = true; });
   ws.querySelectorAll<HTMLButtonElement>(".wstabs button").forEach(b => b.onclick = () => { saveDraft.flush(); tab = b.dataset.tab as Tab; render(); });
   ws.querySelector<HTMLElement>(".wstabs")!.onkeydown = e => {
@@ -557,7 +559,16 @@ function bindTab() {
     const ta = $("#wDraft", ws) as HTMLTextAreaElement, mood = $("#wMood", ws)!, count = $("#wCount", ws)!;
     let lastWords = -1;
     // the box grows with what you write (up to about half the screen), and the line under it keeps you company
-    const fit = () => { ta.style.height = "auto"; ta.style.height = Math.min(Math.max(ta.scrollHeight + 2, 190), Math.round(innerHeight * 0.46)) + "px"; };
+    // it also fills whatever room the card has, so pulling the card bigger gives you a bigger page
+    const fit = () => {
+      ta.style.height = "190px";
+      const b = $("#wsBody", ws!), end = b?.lastElementChild as HTMLElement | null;
+      const spare = b && end ? b.clientHeight - (end.offsetTop + end.offsetHeight + 20) : 0; // room left under everything at the smallest size
+      const floor = 190 + Math.max(0, spare);
+      ta.style.height = "auto";
+      ta.style.height = Math.max(floor, Math.min(ta.scrollHeight + 2, Math.max(floor, Math.round(innerHeight * 0.46)))) + "px";
+    };
+    onCardSize(fit);
     const tell = () => {
       const w = words(ta.value);
       if (w === lastWords) return;

@@ -4,7 +4,8 @@ import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
 import Highlight from "@tiptap/extension-highlight";
 import { TaskList, TaskItem } from "@tiptap/extension-list";
-import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
+import { Diagram, MarkerMark, MarkerOutput, Picture, Pin, repaintAll } from "./extensions";
+import { isPicture, NOTE_PICTURE_BUDGET, shrink } from "./picture";
 import { aiAvailable, closeBox, contextActions, openBox, runIntent, setOpenNote, setPendingOpen, takePendingOpen, TYPE_INFO } from "./markerBox";
 import { dropFreeMarker, giveOutputIds, markRange, moveFreeMarker, outputsInDoc, pinIds, setEditor } from "./ops";
 import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, onRemote, patchNote, putMarker, putMeta, putNote, recordOpened, reconcilePins, state } from "../store";
@@ -13,6 +14,7 @@ import { fingerprint, gradeMarker } from "../study";
 import { findCandidates, type Candidate } from "./suggest";
 import { $, armButton, debounce, esc, toast, uid } from "../util";
 import { stripMarkers } from "../sync";
+import { bindNoteMenu } from "./noteMenu";
 
 let ed: Editor | null = null;
 let unsub: (() => void) | null = null;
@@ -22,6 +24,7 @@ let flushSave: (() => void) | null = null;
 export function flushNote() { flushSave?.(); }
 
 export function destroyNote() {
+  addPicturesFn = null;
   closeBox();
   cleanup.forEach(f => f());
   cleanup = [];
@@ -33,6 +36,18 @@ export function destroyNote() {
   (CSS as unknown as { highlights?: Map<string, unknown> }).highlights?.delete("suggest");
 }
 
+/** Set by the open note: adds image files to it. */
+let addPicturesFn: ((files: File[]) => Promise<void>) | null = null;
+/** Ask for image files (the classic tools' Picture button). On a phone this offers the camera too. */
+function pickPictures() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.id = "picFile"; inp.hidden = true;
+  inp.onchange = () => { const fs = [...(inp.files || [])].filter(isPicture); inp.remove(); if (fs.length) void addPicturesFn?.(fs); };
+  document.querySelector("#picFile")?.remove();
+  document.body.appendChild(inp);
+  inp.click();
+  return true;
+}
 const TOOLS: [string, string, (e: Editor) => void, (e: Editor) => boolean][] = [
   ["B", "Bold", e => e.chain().focus().toggleBold().run(), e => e.isActive("bold")],
   ["I", "Italic", e => e.chain().focus().toggleItalic().run(), e => e.isActive("italic")],
@@ -45,6 +60,7 @@ const TOOLS: [string, string, (e: Editor) => void, (e: Editor) => boolean][] = [
   ["❝", "Quote", e => e.chain().focus().toggleBlockquote().run(), e => e.isActive("blockquote")],
   ["</>", "Code", e => e.chain().focus().toggleCodeBlock().run(), e => e.isActive("codeBlock")],
   ["▮", "Highlight", e => e.chain().focus().toggleHighlight().run(), e => e.isActive("highlight")],
+  ["▣", "Picture", () => pickPictures(), () => false],
   ["↶", "Undo", e => e.chain().focus().undo().run(), () => false],
   ["↷", "Redo", e => e.chain().focus().redo().run(), () => false]
 ];
@@ -80,6 +96,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
         <button class="tbtn lostcapture" id="captureLost" title="Capture confusion at your selection or cursor">◌ Lost me here</button>
         <button class="tbtn drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page">+ Marker</button>
         <button class="tbtn ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Show classic formatting tools">Aa</button>
+        <span class="nmwrap"><button class="tbtn" id="moreBtn" aria-label="Outline, pictures, print and export" aria-expanded="false" aria-controls="noteMenu" title="Outline, pictures, print and export">•••</button><div class="notemenu" id="noteMenu" hidden></div></span>
         <button class="tbtn" id="delNote">Delete</button>
       </div>
       <div class="toolbar" id="toolbar" ${state.meta.showTools ? "" : "hidden"}>${TOOLS.map((t, i) => `<button data-i="${i}" title="${t[1]}" aria-label="${t[1]}">${esc(t[0])}</button>`).join("")}</div>
@@ -198,12 +215,27 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: false, trailingNode: false }),
       Highlight, TaskList, TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: ({ node }) => (node.type.name === "heading" ? "Heading" : "Start writing, or tap + to place a marker here") }),
-      MarkerMark, Pin, MarkerOutput, Diagram
+      MarkerMark, Pin, MarkerOutput, Diagram, Picture
     ],
     content: (n.doc as object) || n.html || "",
     editorProps: {
       attributes: { class: "body", spellcheck: "true", role: "textbox", "aria-multiline": "true", "aria-label": "Note text" },
-      transformPastedHTML: html => html.replace(/data-(pin|marker|marker-output)="[^"]*"/g, "")
+      transformPastedHTML: html => html.replace(/data-(pin|marker|marker-output)="[^"]*"/g, ""),
+      // a screenshot on the clipboard, or image files dropped on the page, become pictures in the note
+      handlePaste: (_v, e) => {
+        const files = [...(e.clipboardData?.files || [])].filter(isPicture);
+        if (!files.length) return false;
+        e.preventDefault();
+        void addPictures(files);
+        return true;
+      },
+      handleDrop: (view, e, _slice, movedInside) => {
+        const files = movedInside ? [] : [...(e.dataTransfer?.files || [])].filter(isPicture);
+        if (!files.length) return false;
+        e.preventDefault();
+        void addPictures(files, view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos);
+        return true;
+      }
     },
     onUpdate: () => { save(); reconcilePins(id, pinIds()); layoutRail(); updateFloat(); refreshSuggestions(); },
     onSelectionUpdate: () => updateFloat(),
@@ -211,6 +243,26 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     onFocus: () => updateFloat()
   });
   setEditor(ed);
+  /** Shrink each image and put it in the note, at `at` or at the cursor. Says so when the note has no room left. */
+  async function addPictures(files: File[], at?: number) {
+    if (!ed) return;
+    let added = 0;
+    for (const f of files.slice(0, 8)) {
+      let src: string;
+      try { src = await shrink(f); } catch (err) { toast((err as Error).message); continue; }
+      if (!ed || ed.isDestroyed) return;
+      if (JSON.stringify(ed.getJSON()).length + src.length > NOTE_PICTURE_BUDGET) {
+        toast("This note is full: pictures share about 1.5 MB per note so it can sync. Start a new note for more.");
+        break;
+      }
+      const node = { type: "picture", attrs: { src, alt: "", w: "m" } };
+      if (typeof at === "number") { ed.chain().insertContentAt(at, node).run(); at = undefined; }
+      else ed.chain().focus().insertContent(node).run();
+      added++;
+    }
+    if (added) toast(added === 1 ? "Picture added. Tap it to resize or caption it." : `${added} pictures added.`);
+  }
+  addPicturesFn = addPictures;
   if (!n.doc) save();
   reconcilePins(id, pinIds());
 
@@ -240,6 +292,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   const title = $("#ptitle", stage) as HTMLInputElement;
   title.oninput = () => { patch({ title: title.value.trim() || "Untitled note" }); };
   title.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ed?.commands.focus("start"); } };
+  bindNoteMenu($("#moreBtn", stage)!, $("#noteMenu", stage)!, () => note(id), () => void pickPictures());
   armButton($("#delNote", stage)!, "Delete", "Tap again to delete", async () => { save.flush(); await deleteNote(id); toast("Note deleted."); goHome(); });
   stage.querySelectorAll<HTMLButtonElement>(".backlinks [data-open]").forEach(b => b.onclick = () => openNote(b.dataset.open!));
 

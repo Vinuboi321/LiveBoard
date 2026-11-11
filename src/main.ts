@@ -1,7 +1,8 @@
 import "./styles.css";
 import { initTheme, isDark, onTheme, toggleTheme } from "./theme";
+import { initSession } from "./session";
 initTheme(); // before anything renders, so there is no flash of the other theme
-import { cardFor, destroyHome, diveInto, takeSwipe, installHomeListeners, renderHome, setFocusNote, homeAlive, inRecall } from "./home/home";
+import { cardFor, destroyHome, diveInto, queueRecall, takeSwipe, installHomeListeners, renderHome, setFocusNote, homeAlive, inRecall } from "./home/home";
 import { destroyNote, flushNote, renderNote } from "./editor/noteView";
 import { fileToHtml } from "./importers";
 import { openSettings } from "./settings";
@@ -165,6 +166,8 @@ async function boot() {
   const tb = $("#themeBtn")!, labelTheme = () => tb.setAttribute("aria-label", isDark() ? "Switch to light mode" : "Switch to dark mode");
   tb.onclick = toggleTheme; onTheme(labelTheme); labelTheme();
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
+  // a study session ends with a quiz, on the dial, of exactly what was marked during it
+  initSession({ exitTicket: ids => { queueRecall(ids, "Exit ticket"); if (location.hash.startsWith("#note-")) goHome(); } });
   const ss = $("#syncState")!; // the sync line opens Settings, where waiting or refused items are explained
   ss.setAttribute("role", "button"); ss.tabIndex = 0;
   ss.onclick = () => openSettings(undefined, refresh);

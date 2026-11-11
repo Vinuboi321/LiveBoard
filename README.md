@@ -73,6 +73,14 @@ Markers are color-coded by type: writing, question, explanation, math, visual, l
 
 **The marker card.** Larger (500 × 680 where there's room). The Write box is a ruled writing desk that grows as you type, with a word count and a line of encouragement under it and prompts that rotate while it's empty; Ctrl/⌘ + Enter inserts into the note. The selected tab's highlight slides between tabs and each tab's contents step in from the side you moved toward. Keeping, inserting and reaching Mastered get a small burst of sparks.
 
+**Resizable marker card.** Pull any side or corner of an open marker and it behaves like something elastic. It chases your hand on a loose spring (lags, overshoots once, settles), thins along the other axis while it moves fast, and leans into a diagonal pull. The corner you hold pinches tighter while the far ones round out, the edge you hold glows and bows, and a small readout shows the size. Pulled past its smallest or largest size it keeps giving a little, then snaps back; letting go sends a ripple off that side. The size is remembered on this device, arrow keys on a focused handle adjust it, a double-click springs it back to standard, and the Write box grows to fill whatever room you give it. With reduced motion on, the card simply follows the pointer.
+
+**Pictures.** Paste a screenshot, drop image files on the page, or use ••• → Picture (on a phone this offers the camera). Each picture is shrunk on the device to roughly 100–160 KB and stored inside the note, so it works offline and syncs with the note; nothing is ever loaded from a web address, and images in pasted web pages are dropped. Tap a picture to make it Small, Medium or Full, caption it, or remove it. A note syncs as one record of about 2 MB, so a note holds roughly a dozen pictures; past that LiveBoard says the note is full rather than failing to sync.
+
+**Study sessions.** **Focus** in the header starts a 15, 25, 45 or 60 minute timer that follows you between notes and survives a reload. When it ends (or you end it), LiveBoard offers an **exit ticket**: a quiz on exactly the markers you placed during the session. No sound, no blocking dialog.
+
+**Outline, print and export.** The ••• menu on a note lists its headings to jump to, shows a word count and reading time, and takes the note out of the app: print or save as PDF (the note alone, no app chrome), copy as Markdown, or download a .md file.
+
 **Light and dark.** The sun/moon button in the header switches themes, and Settings → Appearance offers Match device, Light or Dark. Dark is the original deep-violet look; light is near-white and quiet, with color kept for courses, folders and markers. The choice is saved per device, not synced.
 
 ## Set up and deploy

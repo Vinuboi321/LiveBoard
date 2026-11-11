@@ -1,4 +1,5 @@
 import DOMPurify from "dompurify";
+import { PIC_SRC } from "./editor/picture";
 import { course, note, state } from "./store";
 import type { Course, Marker, Note, ThreadMsg } from "./types";
 
@@ -9,7 +10,7 @@ import type { Course, Marker, Note, ThreadMsg } from "./types";
 export const MAX_BACKUP_BYTES = 40 * 1024 * 1024;
 const LIMITS = { notes: 5000, markers: 50000, courses: 300, thread: 500, nodes: 300000, depth: 80 };
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
-const NODES = new Set(["doc", "paragraph", "text", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "horizontalRule", "hardBreak", "taskList", "taskItem", "pin", "markerOutput", "diagram"]);
+const NODES = new Set(["doc", "paragraph", "text", "heading", "bulletList", "orderedList", "listItem", "blockquote", "codeBlock", "horizontalRule", "hardBreak", "taskList", "taskItem", "pin", "markerOutput", "diagram", "picture"]);
 const MARKS = new Set(["bold", "italic", "underline", "strike", "code", "highlight", "marker", "link"]);
 const TYPES = new Set(["note", "question", "explain", "math", "visual", "link", "reminder"]);
 
@@ -42,6 +43,10 @@ function checkDoc(doc: unknown, where: string) {
     if (node.attrs !== undefined) {
       if (!isObj(node.attrs)) fail(`${where}: formatting is damaged.`);
       for (const v of Object.values(node.attrs as object)) if (v !== null && !["string", "number", "boolean"].includes(typeof v)) fail(`${where}: formatting is damaged.`);
+    }
+    if (node.type === "picture") { // a picture must be inline data, never an address to fetch
+      const src = (node.attrs as Record<string, unknown> | undefined)?.src;
+      if (src !== undefined && src !== "" && !(typeof src === "string" && PIC_SRC.test(src))) fail(`${where} contains a picture LiveBoard can't restore.`);
     }
     if (node.marks !== undefined) {
       if (!Array.isArray(node.marks)) fail(`${where}: formatting is damaged.`);

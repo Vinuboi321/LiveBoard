@@ -282,6 +282,92 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.waitForSelector("#ptitle");
   ok((await p.inputValue("#ptitle")) === "Needle in the stack" && !(await p.$("#shelf")), "searching the shelf finds one note among hundreds and opens it");
 
+  // A study session: start the timer, mark something, end it, and the exit ticket quizzes exactly what was marked.
+  await p.goto(BASE); await p.waitForSelector("#focusBtn"); await p.waitForTimeout(2300);
+  await p.click("#focusBtn"); await p.click('[data-min="15"]');
+  ok(/^1[45]:\d\d$/.test((await p.textContent("#focusBtn .fbt")).trim()), "starting a study session shows the countdown in the header");
+  await p.click(".hbtn[data-act='blank']");
+  await p.waitForSelector("#editor .ProseMirror");
+  await p.fill("#ptitle", "Session note");
+  await p.click("#editor .ProseMirror");
+  await p.keyboard.type("Osmosis moves water across a membrane toward the side with more solute.");
+  await p.waitForTimeout(300);
+  await select(/Osmosis/, 20);
+  await p.click(".floatbtn.place");
+  await p.waitForSelector(".mws");
+  await p.waitForTimeout(700);
+
+  // The marker card resizes from its sides and corners, remembers the size, and springs back on a double-click.
+  const cardBox = () => p.evaluate(() => { const r = document.querySelector(".mws").getBoundingClientRect(); return { x: r.left, y: r.top, w: Math.round(r.width), h: Math.round(r.height) }; });
+  const b0 = await cardBox();
+  const vw = await p.evaluate(() => innerWidth);
+  const west = b0.x > vw - (b0.x + b0.w), grabX = west ? b0.x + 3 : b0.x + b0.w - 3, dirX = west ? -1 : 1; // pull whichever side has more room
+  await p.mouse.move(grabX, b0.y + b0.h / 2); await p.mouse.down();
+  await p.mouse.move(grabX + dirX * 90, b0.y + b0.h / 2, { steps: 5 });
+  const mid = await p.evaluate(() => { const c = document.querySelector(".mws"); return { on: c.classList.contains("resizing"), lit: !!c.querySelector(".wsresize.pulling"), chip: c.querySelector(".wssize")?.textContent || "" }; });
+  ok(mid.on && mid.lit && /\d+ × \d+/.test(mid.chip), `while pulling, the edge lights up and the card shows its size (${mid.chip})`);
+  await p.mouse.up();
+  await p.waitForFunction(() => !document.querySelector(".mws").classList.contains("resizing"), null, { timeout: 4000 });
+  const b1 = await cardBox();
+  ok(Math.abs(b1.w - (b0.w + 90)) <= 3, `pulling a side of the marker card resizes it (${b0.w} → ${b1.w})`);
+  const kept = JSON.parse(await p.evaluate(() => localStorage.getItem("lb-card-size")) || "{}");
+  ok(Math.abs((kept.width || 0) - b1.w) <= 1, `the card remembers its size on this device (${kept.width})`);
+  // pulled far past its smallest size it gives a little, then snaps back to the smallest size on release
+  const gx = west ? b1.x + 3 : b1.x + b1.w - 3;
+  await p.mouse.move(gx, b1.y + b1.h / 2); await p.mouse.down();
+  await p.mouse.move(gx - dirX * 900, b1.y + b1.h / 2, { steps: 6 }); await p.mouse.up();
+  await p.waitForFunction(() => !document.querySelector(".mws").classList.contains("resizing"), null, { timeout: 4000 });
+  ok((await cardBox()).w === 320, `the card can't be pulled smaller than its minimum (${(await cardBox()).w})`);
+  await p.dblclick(".mws .wsresize-s");
+  await p.waitForTimeout(150);
+  await p.waitForFunction(() => !document.querySelector(".mws").classList.contains("resizing"), null, { timeout: 4000 });
+  const b2 = await cardBox(), keptAfter = await p.evaluate(() => localStorage.getItem("lb-card-size"));
+  ok(b2.w === b0.w && keptAfter === null, `double-clicking a side springs the card back to its standard size (${b2.w}, ${keptAfter})`);
+  await p.keyboard.press("Escape");
+
+  // The note's more menu exports the note as Markdown, without the app's own buttons in it.
+  await p.click("#moreBtn");
+  const [dl] = await Promise.all([p.waitForEvent("download"), p.click('#noteMenu [data-act="file"]')]);
+  const mdText = require("fs").readFileSync(await dl.path(), "utf8");
+  ok(/^# Session note/.test(mdText) && /Osmosis moves water across a membrane/.test(mdText) && !/↗|Keep|Remove/.test(mdText), "a note downloads as clean Markdown");
+
+  await p.click("#focusBtn"); await p.click("#fEnd");
+  await p.waitForSelector(".sessiondone #sdGo");
+  ok(/1 marker placed/.test(await p.textContent(".sessiondone")), "ending the session counts the markers placed during it");
+  await p.click("#sdGo");
+  await p.waitForSelector("#dial.recall", { timeout: 8000 });
+  ok(/Exit ticket 1 of 1/.test(await p.textContent("#info")), "the exit ticket quizzes exactly what was marked in the session");
+
+  // Pictures: an image file becomes an inline picture in the note, shrunk on the device, resizable, captioned, and kept across a reload.
+  await p.goto(BASE); await p.waitForSelector(".hbtn[data-act='blank']"); await p.waitForTimeout(2200);
+  await p.click(".hbtn[data-act='blank']"); await p.waitForSelector("#ptitle");
+  await p.fill("#ptitle", "Picture note");
+  await p.click("#editor .ProseMirror"); await p.keyboard.type("Slide 4:");
+  const png = await p.evaluate(async () => { const c = document.createElement("canvas"); c.width = 2400; c.height = 1500; const g = c.getContext("2d"); for (let i = 0; i < 400; i++) { g.fillStyle = `hsl(${i * 7},70%,${30 + (i % 5) * 10}%)`; g.fillRect((i * 97) % 2400, (i * 61) % 1500, 260, 180); } return c.toDataURL("image/png").split(",")[1]; });
+  await p.click("#moreBtn");
+  const [chooser] = await Promise.all([p.waitForEvent("filechooser"), p.click('#noteMenu [data-act="picture"]')]);
+  await chooser.setFiles({ name: "slide.png", mimeType: "image/png", buffer: Buffer.from(png, "base64") });
+  await p.waitForSelector("#editor figure.pic img[src^='data:image/']");
+  const pic = await p.evaluate(() => { const i = document.querySelector("#editor figure.pic img"); return { len: i.src.length, kind: i.src.slice(5, 15) }; });
+  ok(pic.len < 260000 && /webp|jpeg/.test(pic.kind), `a large picture is shrunk before it's stored (${Math.round(pic.len / 1024)} KB, ${pic.kind})`);
+  await p.click("#editor figure.pic img");
+  await p.click('#editor .picbar [data-w="l"]');
+  ok((await p.getAttribute("#editor figure.pic", "data-w")) === "l", "a selected picture can be resized");
+  await p.click("#editor figure.pic img");
+  await p.click('#editor .picbar [data-do="cap"]'); await p.fill("#editor .picbar input", "Supply and demand curves"); await p.keyboard.press("Enter");
+  ok(/Supply and demand curves/.test(await p.textContent("#editor figure.pic figcaption")), "a picture can be captioned");
+  await p.waitForTimeout(900);
+  await p.reload(); await p.waitForSelector("#editor figure.pic img[src^='data:image/']");
+  ok((await p.getAttribute("#editor figure.pic", "data-w")) === "l" && /Slide 4/.test(await p.textContent("#editor")), "the picture, its size and the text around it survive a reload");
+  await p.click("#editor .ProseMirror p");
+  await p.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/html", '<p>pasted words</p><img src="https://example.com/track.png">');
+    document.querySelector("#editor .ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await p.waitForFunction(() => /pasted words/.test(document.querySelector("#editor").textContent));
+  ok((await p.$$("#editor img")).length === 1 && !(await p.$("#editor img:not([src^='data:image/'])")), "pasting a web page keeps its words but never an image that loads from the web");
+
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL REGRESSIONS PASS");
   process.exit(errs.length ? 1 : 0);

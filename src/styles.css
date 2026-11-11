@@ -976,27 +976,62 @@ button.moutlabel:hover, .moutsrc:hover { color: var(--tc, var(--ink)); }
 .wsburst i:nth-child(3n) { border-radius: 2px; background: var(--mark); } .wsburst i:nth-child(4n) { background: var(--g7); }
 @keyframes spark { from { transform: translate(0, 0) rotate(0); opacity: 1; } to { transform: translate(var(--x), var(--y)) rotate(160deg) scale(.2); opacity: 0; } }
 
-/* Elastic marker edges: roomy invisible hit areas, a visible corner grip, no text distortion. */
+/* ---------- Resizing the marker card: pull any side or corner and it behaves like something elastic ---------- */
 .mws > .wsresize { position: absolute; z-index: 20; border: 0; padding: 0; background: transparent; touch-action: none; }
-.wsresize-n, .wsresize-s { left: 24px; right: 24px; height: 10px; cursor: ns-resize; }
-.wsresize-n { top: 0; } .wsresize-s { bottom: 0; }
-.wsresize-e, .wsresize-w { top: 24px; bottom: 24px; width: 10px; cursor: ew-resize; }
-.wsresize-e { right: 0; } .wsresize-w { left: 0; }
-.wsresize-ne, .wsresize-se, .wsresize-sw, .wsresize-nw { width: 24px; height: 24px; }
-.wsresize-ne { top: 0; right: 0; cursor: nesw-resize; }
-.wsresize-se { bottom: 0; right: 0; cursor: nwse-resize; }
-.wsresize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
-.wsresize-nw { top: 0; left: 0; cursor: nwse-resize; }
-.wsresize-se::after { content: ''; position: absolute; right: 7px; bottom: 7px; width: 9px; height: 9px; border-right: 2px solid var(--tc); border-bottom: 2px solid var(--tc); border-radius: 0 0 4px 0; opacity: .65; }
-.wsresize:hover, .wsresize:focus-visible, .wsresize.pulling { background: color-mix(in srgb, var(--tc) 20%, transparent); border-radius: 12px; }
-.wsresize:focus-visible { outline: 2px solid var(--tc); outline-offset: -3px; }
-.mws.resizing { user-select: none; animation: none; rotate: 0deg; scale: 1;
-  border-radius: calc(26px + var(--pull, 0px));
-  box-shadow: 0 0 0 calc(2px + var(--pull, 0px)) color-mix(in srgb, var(--tc) 15%, transparent), 0 35px 90px rgba(10,20,35,.3); }
-@media (pointer: coarse) { .wsresize-n, .wsresize-s { height: 16px; } .wsresize-e, .wsresize-w { width: 16px; } }
-@media (prefers-reduced-motion: reduce) { .mws.resizing { border-radius: 26px; } }
-
+.wsresize-n, .wsresize-s { left: 28px; right: 28px; height: 10px; cursor: ns-resize; } .wsresize-n { top: 0; } .wsresize-s { bottom: 0; }
+.wsresize-e, .wsresize-w { top: 28px; bottom: 28px; width: 10px; cursor: ew-resize; } .wsresize-e { right: 0; } .wsresize-w { left: 0; }
+/* corners are generous: the card's own rounding eats the outer few pixels */
+.wsresize-ne, .wsresize-se, .wsresize-sw, .wsresize-nw { width: 28px; height: 28px; }
+.wsresize-ne { top: 0; right: 0; cursor: nesw-resize; } .wsresize-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.wsresize-se { bottom: 0; right: 0; cursor: nwse-resize; } .wsresize-nw { top: 0; left: 0; cursor: nwse-resize; }
+/* each side has a band in the marker's colour: faint on hover, and while you pull it thickens, glows and bows outward the harder the card is straining */
+.wsresize i { position: absolute; border-radius: 99px; background: var(--tc); opacity: 0; pointer-events: none; transition: opacity .15s, transform .22s cubic-bezier(.2, .9, .25, 1.5); }
+.wsresize-n i, .wsresize-s i { left: 30%; right: 30%; height: 3px; } .wsresize-n i { top: 2px; } .wsresize-s i { bottom: 2px; }
+.wsresize-e i, .wsresize-w i { top: 30%; bottom: 30%; width: 3px; } .wsresize-e i { right: 2px; } .wsresize-w i { left: 2px; }
+.wsresize-ne i, .wsresize-se i, .wsresize-sw i, .wsresize-nw i { width: 15px; height: 15px; background: none; border: 3px solid var(--tc); border-radius: 0; }
+.wsresize-se i { right: 6px; bottom: 6px; border-left-color: transparent; border-top-color: transparent; border-bottom-right-radius: 13px; }
+.wsresize-sw i { left: 6px; bottom: 6px; border-right-color: transparent; border-top-color: transparent; border-bottom-left-radius: 13px; }
+.wsresize-ne i { right: 6px; top: 6px; border-left-color: transparent; border-bottom-color: transparent; border-top-right-radius: 13px; }
+.wsresize-nw i { left: 6px; top: 6px; border-right-color: transparent; border-bottom-color: transparent; border-top-left-radius: 13px; }
+.wsresize:hover i, .wsresize:focus-visible i { opacity: .6; }
+.wsresize.pulling i { opacity: 1; filter: drop-shadow(0 0 calc(4px + var(--pull, 0) * 12px) var(--tc)); }
+.wsresize-n.pulling i { transform: translateY(calc(var(--pull, 0) * -3px)) scaleX(calc(1.5 + var(--pull, 0) * .7)) scaleY(calc(1 + var(--pull, 0) * 2.2)); }
+.wsresize-s.pulling i { transform: translateY(calc(var(--pull, 0) * 3px)) scaleX(calc(1.5 + var(--pull, 0) * .7)) scaleY(calc(1 + var(--pull, 0) * 2.2)); }
+.wsresize-e.pulling i { transform: translateX(calc(var(--pull, 0) * 3px)) scaleY(calc(1.5 + var(--pull, 0) * .7)) scaleX(calc(1 + var(--pull, 0) * 2.2)); }
+.wsresize-w.pulling i { transform: translateX(calc(var(--pull, 0) * -3px)) scaleY(calc(1.5 + var(--pull, 0) * .7)) scaleX(calc(1 + var(--pull, 0) * 2.2)); }
+.wsresize-ne.pulling i, .wsresize-se.pulling i, .wsresize-sw.pulling i, .wsresize-nw.pulling i { transform: scale(calc(1.25 + var(--pull, 0) * .6)); }
+.wsresize:focus-visible { outline: 2px solid var(--tc); outline-offset: -3px; border-radius: 12px; }
+/* the bottom-right corner always shows a faint grip, so it's findable without hovering */
+.wsresize-se::after { content: ""; position: absolute; right: 9px; bottom: 9px; width: 9px; height: 9px; border-right: 2px solid var(--tc); border-bottom: 2px solid var(--tc); border-radius: 0 0 5px 0; opacity: .5; transition: opacity .15s; }
+.wsresize-se:hover::after, .wsresize-se.pulling::after, .wsresize-se:focus-visible::after { opacity: 0; }
+.mws.resizing { transition: none; user-select: none; animation: none; rotate: 0deg; scale: 1; will-change: transform, width, height;
+  box-shadow: 0 2px 0 rgba(255, 255, 255, .5) inset, 0 34px 90px rgba(10, 20, 35, .34), 0 0 0 calc(1.5px + var(--pull, 0) * 3px) color-mix(in srgb, var(--tc) calc(30% + var(--pull, 0) * 45%), transparent), 0 0 calc(var(--pull, 0) * 46px) color-mix(in srgb, var(--tc) 40%, transparent); }
+/* the corner you hold pinches tighter and the far ones round out; a side pull swells the two corners on that side */
+.mws.resizing[data-rz="se"] { border-radius: calc(26px + var(--pull, 0) * 16px) 26px calc(26px - var(--pull, 0) * 17px) 26px; }
+.mws.resizing[data-rz="sw"] { border-radius: 26px calc(26px + var(--pull, 0) * 16px) 26px calc(26px - var(--pull, 0) * 17px); }
+.mws.resizing[data-rz="ne"] { border-radius: 26px calc(26px - var(--pull, 0) * 17px) 26px calc(26px + var(--pull, 0) * 16px); }
+.mws.resizing[data-rz="nw"] { border-radius: calc(26px - var(--pull, 0) * 17px) 26px calc(26px + var(--pull, 0) * 16px) 26px; }
+.mws.resizing[data-rz="e"] { border-radius: 26px calc(26px + var(--pull, 0) * 20px) calc(26px + var(--pull, 0) * 20px) 26px; }
+.mws.resizing[data-rz="w"] { border-radius: calc(26px + var(--pull, 0) * 20px) 26px 26px calc(26px + var(--pull, 0) * 20px); }
+.mws.resizing[data-rz="s"] { border-radius: 26px 26px calc(26px + var(--pull, 0) * 20px) calc(26px + var(--pull, 0) * 20px); }
+.mws.resizing[data-rz="n"] { border-radius: calc(26px + var(--pull, 0) * 20px) calc(26px + var(--pull, 0) * 20px) 26px 26px; }
+.mws.resizing .wsbody, .mws.resizing .wsanchor { pointer-events: none; }
 .mws.resized:not(.closing) { animation: none; }
+.wssize { position: absolute !important; left: 50%; bottom: 46px; z-index: 21; translate: -50% 0; padding: 4px 11px; border-radius: 99px; background: var(--tc); color: #fff; font: 600 11.5px var(--mono); font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; box-shadow: 0 8px 20px color-mix(in srgb, var(--tc) 45%, transparent); animation: sizein .2s cubic-bezier(.2, .9, .25, 1.5); }
+.wssize.bye { opacity: 0; translate: -50% 6px; transition: opacity .35s .1s, translate .35s .1s; }
+@keyframes sizein { from { opacity: 0; scale: .7; } }
+/* letting go sends a ripple off the side that was pulled */
+.wsripple { position: absolute !important; inset: 0; z-index: 19; border-radius: inherit; pointer-events: none; border: 2px solid var(--tc); animation: wsrip .62s cubic-bezier(.2, .7, .3, 1) forwards; }
+.wsripple-e { transform-origin: 0 50%; --rs: 1.05 1; } .wsripple-w { transform-origin: 100% 50%; --rs: 1.05 1; }
+.wsripple-s { transform-origin: 50% 0; --rs: 1 1.04; } .wsripple-n { transform-origin: 50% 100%; --rs: 1 1.04; }
+.wsripple-se { transform-origin: 0 0; --rs: 1.05 1.04; } .wsripple-sw { transform-origin: 100% 0; --rs: 1.05 1.04; }
+.wsripple-ne { transform-origin: 0 100%; --rs: 1.05 1.04; } .wsripple-nw { transform-origin: 100% 100%; --rs: 1.05 1.04; }
+@keyframes wsrip { from { opacity: .75; scale: 1; } to { opacity: 0; scale: var(--rs, 1.04); } }
+@media (pointer: coarse) {
+  .wsresize-n, .wsresize-s { height: 16px; } .wsresize-e, .wsresize-w { width: 16px; }
+  .wsresize-ne, .wsresize-se, .wsresize-sw, .wsresize-nw { width: 36px; height: 36px; }
+  .wsresize-se i { opacity: .5; }
+}
 
 /* A thought unfolds into a correction; comparison opens like two facing pages. */
 .lostcapture { color: var(--coral, #ff718c); }
@@ -1029,3 +1064,88 @@ button.moutlabel:hover, .moutsrc:hover { color: var(--tc, var(--ink)); }
 .answer-sources summary { cursor:pointer; color:var(--tc); }
 .answer-sources blockquote { margin:12px 0; border-left:2px solid var(--tc); padding-left:12px; }
 .answer-sources small { color:var(--muted); }
+
+/* ---------- Study session: a timer in the header that ends with a quiz on what you marked ---------- */
+.focuswrap { position: relative; }
+.focusbtn { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: none; border-radius: 99px; padding: 5px 12px 5px 7px; font: 600 12.5px var(--display); color: var(--muted); transition: border-color .15s, color .15s, background .2s; }
+.focusbtn:hover { color: var(--ink); border-color: color-mix(in srgb, var(--cobalt) 50%, var(--line)); }
+.focusbtn .fring { --p: 0; width: 16px; height: 16px; border-radius: 50%; background: conic-gradient(var(--g7) calc(var(--p) * 1%), color-mix(in srgb, var(--muted) 45%, transparent) 0); -webkit-mask: radial-gradient(farthest-side, transparent 52%, #000 56%); mask: radial-gradient(farthest-side, transparent 52%, #000 56%); }
+.focusbtn.on { color: var(--ink); border-color: color-mix(in srgb, var(--g7) 55%, var(--line)); background: color-mix(in srgb, var(--g7) 10%, transparent); font-variant-numeric: tabular-nums; }
+.focusbtn.on .fring { animation: fbreathe 2.4s ease-in-out infinite; }
+@keyframes fbreathe { 50% { transform: scale(1.14); } }
+.focusbtn .fbn:not(:empty) { background: var(--mark); color: #2A2100; border-radius: 99px; padding: 0 6px; font: 700 11px var(--mono); }
+.focuspop { left: 0; right: auto; width: 270px; }
+.focuspop h3 { margin: 2px 0 6px; font: 600 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.focuspop p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--muted); }
+.fmins { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.fmins button { border: 1.5px solid var(--line); background: none; border-radius: 12px; padding: 8px 0 6px; font: 10px var(--mono); color: var(--muted); display: flex; flex-direction: column; align-items: center; transition: transform .16s cubic-bezier(.2, .9, .25, 1.5), border-color .15s; }
+.fmins button b { font: 700 19px/1.1 var(--display); color: var(--ink); }
+.fmins button:hover { border-color: var(--g7); transform: translateY(-2px); }
+.fbig { font: 700 40px/1 var(--display); letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin: 4px 0 8px; }
+.frow { display: flex; gap: 8px; }
+.frow button { flex: 1; border: 1.5px solid var(--line); background: none; border-radius: 12px; padding: 8px 10px; font: 600 13px var(--display); }
+.frow button.pri { background: var(--cobalt); color: var(--oncobalt); border-color: transparent; }
+.sessiondone { position: fixed; z-index: 1500; top: 70px; left: 50%; translate: -50% 0; width: min(360px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 4px; padding: 16px 18px; background: var(--paper); border: 1.5px solid color-mix(in srgb, var(--g7) 55%, var(--line)); border-radius: 20px;
+  box-shadow: 0 30px 70px -20px color-mix(in srgb, var(--g7) 55%, rgba(10, 12, 30, .6)), 0 6px 16px rgba(10, 12, 30, .16); animation: sdin .5s cubic-bezier(.2, .9, .25, 1.2); }
+@keyframes sdin { from { opacity: 0; transform: perspective(900px) translateY(-24px) rotateX(24deg) scale(.92); } }
+.sessiondone b { font: 700 22px/1.1 var(--display); letter-spacing: -.02em; }
+.sessiondone span { font: 12px var(--mono); color: var(--muted); }
+.sessiondone p { margin: 6px 0 8px; font-size: 14px; line-height: 1.45; }
+.sdrow { display: flex; gap: 8px; }
+.sdgo { border: 0; background: linear-gradient(90deg, var(--g6), var(--g7)); color: #fff; border-radius: 99px; padding: 8px 16px; font: 700 14px var(--display); box-shadow: 0 8px 18px color-mix(in srgb, var(--g7) 40%, transparent); }
+.sdno { border: 1.5px solid var(--line); background: none; border-radius: 99px; padding: 7px 14px; font: 600 13.5px var(--display); color: var(--muted); }
+@media (max-width: 640px) { .focusbtn .fbt { display: none; } .focusbtn.on .fbt { display: inline; } .focusbtn { padding: 5px 7px; } }
+
+/* ---------- The note's more menu: outline and export ---------- */
+.nmwrap { position: relative; display: inline-flex; }
+.notemenu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 290px; max-height: min(70vh, 520px); overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 10px; background: var(--paper); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 22px 50px rgba(20, 15, 50, .22); animation: cardin .22s cubic-bezier(.2, .9, .25, 1.1); transform-origin: 100% 0; }
+.nmlabel { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 2px; }
+.nmempty { margin: 0; padding: 2px 8px 6px; font-size: 13px; color: var(--muted); }
+.nmoutline { display: flex; flex-direction: column; margin-bottom: 4px; }
+.notemenu button { border: 0; background: none; border-radius: 10px; padding: 7px 8px; text-align: left; display: flex; flex-direction: column; color: var(--ink); }
+.notemenu button:hover { background: var(--desk); }
+.notemenu button b { font: 600 14px var(--display); } .notemenu button small { font-size: 12px; color: var(--muted); }
+.nmoutline button { font: 600 14px/1.3 var(--display); padding: 5px 8px; border-left: 2px solid transparent; border-radius: 0 8px 8px 0; }
+.nmoutline button:hover { border-left-color: var(--cobalt); }
+.nmoutline .lv2 { padding-left: 20px; font-weight: 500; } .nmoutline .lv3 { padding-left: 32px; font-weight: 400; font-size: 13px; color: var(--muted); }
+.nmfoot { margin-top: 4px; padding: 8px 8px 2px; border-top: 1px solid var(--line); font: 11px var(--mono); color: var(--muted); }
+.ProseMirror .jumped { animation: jumped 1.5s ease-out; border-radius: 6px; }
+@keyframes jumped { 0%, 30% { background: color-mix(in srgb, var(--mark) 45%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--mark) 45%, transparent); } }
+
+/* ---------- Pictures in a note ---------- */
+.ProseMirror figure.pic { position: relative; margin: 1.1em 0; width: 62%; max-width: 100%; border-radius: 14px; line-height: 0; cursor: pointer; transition: width .32s cubic-bezier(.2, .85, .25, 1.1), box-shadow .2s; }
+.ProseMirror figure.pic[data-w="s"] { width: 36%; } .ProseMirror figure.pic[data-w="l"] { width: 100%; }
+.ProseMirror figure.pic img { display: block; width: 100%; height: auto; border-radius: 14px; border: 1px solid var(--line); background: #fff; animation: picin .45s cubic-bezier(.2, .85, .25, 1.1) backwards; }
+@keyframes picin { from { opacity: 0; transform: perspective(900px) rotateX(-10deg) translateY(12px) scale(.96); } }
+.ProseMirror figure.pic figcaption { margin-top: 7px; font: italic 14px/1.4 var(--serif); color: var(--muted); text-align: center; }
+.ProseMirror figure.pic.on img, .ProseMirror figure.pic.ProseMirror-selectednode img { outline: 3px solid var(--cobalt); outline-offset: 3px; }
+.picbar { position: absolute; left: 50%; top: -10px; translate: -50% -100%; z-index: 3; display: none; align-items: center; gap: 4px; padding: 4px; border-radius: 99px; line-height: 1.2; white-space: nowrap; background: color-mix(in srgb, var(--paper) 92%, transparent); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(8px); animation: sizein .18s cubic-bezier(.2, .9, .25, 1.4); }
+figure.pic.on .picbar { display: flex; }
+.picbar span { display: flex; gap: 2px; padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--line); }
+.picbar button { border: 0; background: none; border-radius: 99px; padding: 5px 10px; font: 600 12.5px var(--display); color: var(--ink); }
+.picbar button:hover { background: var(--desk); }
+.picbar button[aria-pressed="true"] { background: var(--cobalt); color: var(--oncobalt); }
+.picbar input { border: 0; outline: 0; background: none; width: min(260px, 50vw); padding: 5px 10px; font-size: 14px; color: var(--ink); }
+@media (max-width: 640px) { .ProseMirror figure.pic, .ProseMirror figure.pic[data-w="s"] { width: 100%; } .ProseMirror figure.pic[data-w="s"] { width: 60%; } }
+
+/* ---------- Printing a note: the page and nothing else ---------- */
+@media print {
+  html, body, .app, .desk, .stage { height: auto !important; overflow: visible !important; position: static !important; background: #fff !important; display: block !important; }
+  /* everything that is the app rather than the note */
+  .top, .readbar, .floatbtn, .floatmore, #toast, .updatebar, .sessiondone, .mws, #fpeek, .mapview, .shelf, .picbar,
+  .paper > :not(.ptitle):not(.editorwrap), .editorwrap > :not(#editor), .ProseMirror .pin, .ProseMirror .mchip, .ProseMirror button { display: none !important; }
+  .stage { padding: 0 !important; }
+  .paper { box-shadow: none !important; border: 0 !important; margin: 0 !important; padding: 0 !important; max-width: none !important; width: auto !important; background: #fff !important; animation: none !important; }
+  .paper::before, .paper::after { display: none !important; }
+  .paper, .paper * { color: #000 !important; background: transparent !important; box-shadow: none !important; text-shadow: none !important; }
+  .ptitle { border: 0 !important; padding: 0 !important; font-size: 26pt !important; width: 100% !important; }
+  .ProseMirror { font-size: 11.5pt; }
+  .ProseMirror p { max-width: none !important; }
+  .ProseMirror mark, .ProseMirror .marker, .ProseMirror [data-marker] { background: #FFF1B8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* what a marker wrote keeps a quiet rule beside it, so it still reads as an aside */
+  .ProseMirror .mout { border: 0 !important; border-left: 2pt solid #999 !important; border-radius: 0 !important; padding: 0 0 0 10pt !important; margin: 8pt 0 !important; }
+  .ProseMirror ::selection { background: transparent !important; }
+  .ProseMirror h1, .ProseMirror h2, .ProseMirror h3 { break-after: avoid; }
+  .ProseMirror p, .ProseMirror li, .ProseMirror blockquote { orphans: 3; widows: 3; }
+  @page { margin: 18mm 16mm; }
+}
