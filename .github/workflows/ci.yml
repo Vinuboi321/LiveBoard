@@ -29,7 +29,14 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
+      - name: Install Chromium
+        run: npx playwright install chromium
+      - name: Verify Chromium runtime (install missing system dependencies if needed)
+        run: |
+          if ! node tests/browser-runtime.cjs; then
+            npx playwright install-deps chromium
+            node tests/browser-runtime.cjs
+          fi
       - name: Dependency audit (fails on high or critical)
         run: npm audit --audit-level=high
       - name: Build, then run API, browser, sync and database checks
