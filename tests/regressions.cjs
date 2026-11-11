@@ -209,6 +209,32 @@ const BASE = process.env.BASE || "http://localhost:4173";
   ok(!(await p.$("#fpeek")) && /#note-/.test(await p.evaluate(() => location.hash)), "clicking the peek opens the marker in its note");
   await p.keyboard.press("Escape");
 
+  // Capture confusion without leaving the lecture; keep a correction and compare across markers.
+  await home();
+  await p.click(".hbtn[data-act='blank']");
+  await p.waitForSelector("#editor .ProseMirror");
+  await p.click("#editor .ProseMirror");
+  await p.keyboard.type("Velocity and acceleration are not the same.");
+  await p.click("#captureLost");
+  await p.waitForSelector("#editor .pin");
+  ok(!(await p.$(".mws:not(.closing)")), "Lost me here captures a point without interrupting note taking");
+  await p.click("#editor .pin");
+  await p.click('[data-tab="journey"]');
+  ok((await p.textContent(".thoughttrail")).includes("Lost me here"), "confusion appears in the marker journey");
+  await p.fill("#thoughtBefore", "I thought a moving object always accelerates.");
+  await p.fill("#thoughtAfter", "Acceleration changes velocity; constant velocity has zero acceleration.");
+  await p.click('#journeyForm button');
+  await p.waitForSelector(".thoughtshift");
+  await p.reload(); await p.waitForSelector("#editor .pin");
+  await p.click("#editor .pin"); await p.click('[data-tab="journey"]');
+  ok((await p.textContent(".thoughtshift")).includes("zero acceleration"), "both sides of a breakthrough survive a reload");
+  await p.click("#mCompare");
+  await p.selectOption("#comparePick", {index:1});
+  ok((await p.textContent("#compareA")).includes("Velocity") && (await p.textContent("#compareB")).trim().length>0, "comparison shows two distinct markers");
+  await p.keyboard.press("Escape");
+  ok(!(await p.$(".compareveil")) && !!(await p.$(".mws:not(.closing)")), "Escape closes comparison and leaves the marker open");
+  await p.keyboard.press("Escape");
+
   // Scale: a folder holding far more than the dial shows opens into a shelf of everything, searchable.
   await p.evaluate(async () => {
     const db = await new Promise((res, rej) => { const r = indexedDB.open("liveboard"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });

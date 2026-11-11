@@ -16,6 +16,14 @@ LiveBoard installs as an app on iPad, iPhone, Windows and Mac from the browser, 
 
 **One-tap marking.** Selecting text shows **Place marker** plus actions that mark and run in one tap. With the AI they fit the selection (Simplify, Example, Quiz, Show the steps); without it they're Highlight, Remind me tomorrow and Calculate.
 
+**Lost me here.** Capture confusion at the current selection or cursor without opening a panel or interrupting the lecture. It creates a marker (or uses the marked passage), records the moment in Journey, and makes the point due for recall. It works offline.
+
+**Journey.** Inside a marker, save “I originally thought” alongside “Now I understand.” Each breakthrough stays on a dated timeline; earlier thinking is preserved. Save explicitly to keep a breakthrough. Unsubmitted text is kept only for the current session. These entries use the existing marker thread, so they travel with backups and sync without a database migration. Saving a correction does not automatically award mastery.
+
+**Compare.** The marker's Compare button opens two facing panels: the current marker and any other marker you choose, including one from another note. Read their sources, drafts and saved responses together, then close to return to the same workspace. On small screens the panels stack.
+
+**Resizable workspaces.** Drag any marker-window edge or corner, or focus a resize handle and use arrow keys (Shift for larger steps). Double-click a handle to reset. Sizes are remembered during the session. Capture pulses, unfolding breakthroughs, comparison transitions and elastic resizing respect reduced-motion preferences.
+
 **Suggested markers.** Dashed dots in a note's margin point at sentences that look worth marking: definitions, formulas, rules and causes. They're found on the device with pattern matching, nothing is sent anywhere, and nothing is marked until you tap one. **Hide** turns them off for that note.
 
 **The sky.** Under the dial, every marker is a star: grouped by course, joined into a constellation per note, hollow when unsure and bright when mastered, twinkling when due. Links you made between markers cross it as threads. Tap a star to open its marker.

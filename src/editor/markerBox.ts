@@ -1,3 +1,5 @@
+import { bindJourney, journeyHTML, compareMarker, closeComparison } from "./journey";
+import { bindResize, markerSize } from "./resizeCard";
 import { aiHealth, askMarker, evaluate, localIntent, type LocalAction } from "../ai";
 import { mdToHtml } from "../md";
 import { course, courseName, liveMarkers, liveNotes, newMarker, newNote, note, putCourse, putMarker, putNote, state } from "../store";
@@ -18,8 +20,8 @@ export const TYPE_INFO: Record<MarkerType, { label: string; hint: string }> = {
   link: { label: "Link", hint: "Connected to other points" },
   reminder: { label: "Reminder", hint: "Comes back for review" }
 };
-type Tab = "write" | "ask" | "expand" | "calc" | "related" | "recall";
-const TABS: [Tab, string][] = [["write", "Write"], ["ask", "Ask"], ["expand", "Expand"], ["calc", "Calculate"], ["related", "Related"], ["recall", "Recall"]];
+type Tab = "journey" | "write" | "ask" | "expand" | "calc" | "related" | "recall";
+const TABS: [Tab, string][] = [["write", "Write"], ["ask", "Ask"], ["expand", "Expand"], ["calc", "Calculate"], ["related", "Related"], ["recall", "Recall"], ["journey", "Journey"]];
 const MASTERY = ["Unsure", "Getting it", "Mastered"];
 
 let ws: HTMLElement | null = null;
@@ -66,6 +68,7 @@ aiHealth().then(h => { aiOn = h.ai; if (ws) render(); });
 
 let opener: HTMLElement | null = null; // focus returns here when the card closes
 export function closeBox() {
+  closeComparison();
   clearInterval(promptTimer);
   saveDraft.flush();
   if (ws) {
@@ -115,8 +118,8 @@ function placeCard(anchor: Element | null) {
   if (!ws) return;
   const vw = innerWidth, vh = Math.round(visualViewport?.height || innerHeight), top0 = 64, gap = 14, edge = 12;
   const minH = Math.min(260, vh - top0 - edge); // never taller than the visible screen (on-screen keyboards shrink it)
-  const W = Math.min(500, vw - edge * 2);
-  let H = Math.min(680, vh - top0 - edge * 2);
+  const W = Math.min(markerSize()?.width || 500, vw - edge * 2);
+  let H = Math.min(markerSize()?.height || 680, vh - top0 - edge * 2);
   let left: number, top: number;
   let a = anchor?.getBoundingClientRect();
   if (a && W > vw - 2 * edge - 60) {
@@ -149,8 +152,11 @@ function placeCard(anchor: Element | null) {
 function clampCard() {
   if (!ws) return;
   const r = ws.getBoundingClientRect();
-  ws.style.left = `${Math.min(Math.max(r.left, 8), innerWidth - r.width - 8)}px`;
-  ws.style.top = `${Math.min(Math.max(r.top, 56), innerHeight - 80)}px`;
+  const width = Math.min(r.width, innerWidth - 16);
+  const height = Math.min(r.height, Math.max(100, (visualViewport?.height || innerHeight) - 72));
+  Object.assign(ws.style, { width: `${width}px`, height: `${height}px`,
+    left: `${Math.max(8, Math.min(r.left, innerWidth - width - 8))}px`,
+    top: `${Math.max(64, Math.min(r.top, (visualViewport?.height || innerHeight) - height - 8))}px` });
 }
 const onViewport = () => { if (!ws || !current) return; if (moved) clampCard(); else placeCard(pinEl(current.id)); };
 addEventListener("resize", onViewport);
@@ -230,6 +236,7 @@ function render() {
     <button class="wsgrab" id="mGrab" aria-label="Drag to move" title="Drag to move"><i></i></button>
     <div class="wshead">
       <span class="eyebrow"><i class="tdot"></i>Marker workspace · ${TYPE_INFO[m.type].label}</span>
+      <button class="textlink" id="mCompare" title="Compare two markers side by side">Compare ⇄</button>
       <button class="mx" id="mClose" aria-label="Close marker">×</button>
     </div>
     <div class="wsanchor">
@@ -272,7 +279,9 @@ function render() {
 function bindCommon() {
   if (!ws || !current) return;
   $("#mClose", ws)!.onclick = closeBox;
+  $("#mCompare", ws)!.onclick = () => { saveDraft.flush(); if(current) compareMarker(state.markers.get(current.id) || current); };
   bindDrag();
+  bindResize(ws, () => { moved = true; });
   ws.querySelectorAll<HTMLButtonElement>(".wstabs button").forEach(b => b.onclick = () => { saveDraft.flush(); tab = b.dataset.tab as Tab; render(); });
   ws.querySelector<HTMLElement>(".wstabs")!.onkeydown = e => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
@@ -313,6 +322,7 @@ function body(): string {
   const m = current!;
   const aiBanner = (on: string, off: string) => `<div class="wsnote ${aiOn ? "" : "off"}">${aiOn ? on : off}</div>`;
   switch (tab) {
+    case "journey": return journeyHTML(m);
     case "write": {
       const kept = m.thread.map((t, i) => [t, i] as [ThreadMsg, number]).filter(([t]) => t.role === "self" && t.text.startsWith("✎"));
       return `<h3>Think here. Keep the page clear.</h3><p class="sub">Draft, outline, or collect a thought inside this point.</p>
@@ -526,6 +536,7 @@ const TEMPLATES: Record<string, string> = {
 function bindTab() {
   if (!ws || !current) return;
   const m = current;
+  if (tab === "journey") bindJourney(ws, m, patch => updateMarker(m.id, patch));
   if (tab === "write") {
     const ta = $("#wDraft", ws) as HTMLTextAreaElement, mood = $("#wMood", ws)!, count = $("#wCount", ws)!;
     let lastWords = -1;
@@ -823,7 +834,7 @@ document.addEventListener("pointerdown", e => {
   closeBox();
 });
 document.addEventListener("keydown", e => {
-  if (e.key !== "Escape" || !ws) return;
+  if (e.key !== "Escape" || !ws || document.querySelector(".compareveil")) return;
   const menu = ws.querySelector<HTMLElement>("#mMenu");
   e.stopPropagation();
   if (menu && !menu.hidden) { menu.hidden = true; return; }

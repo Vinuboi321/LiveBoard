@@ -1,3 +1,4 @@
+import { LOST } from "./journey";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import { Placeholder } from "@tiptap/extensions";
@@ -76,6 +77,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
           <input id="newCourse" placeholder="Course name" hidden maxlength="32"></label>
         <span class="spacer"></span>
         <button class="tbtn test" id="testBtn" aria-pressed="false" title="Hide every marked passage and check what you remember" hidden>Test me</button>
+        <button class="tbtn lostcapture" id="captureLost" title="Capture confusion at your selection or cursor">◌ Lost me here</button>
         <button class="tbtn drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page">+ Marker</button>
         <button class="tbtn ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Show classic formatting tools">Aa</button>
         <button class="tbtn" id="delNote">Delete</button>
@@ -337,6 +339,39 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     return m;
   }
   placeBtn.onclick = () => { placeFromSelection(); };
+  const lostBtn = $("#captureLost", stage) as HTMLButtonElement;
+  lostBtn.onmousedown = e => e.preventDefault();
+  lostBtn.onclick = async () => {
+    if (!ed || lostBtn.disabled) return;
+    if (!ed.isEditable) { toast("Leave Test me to capture a new point."); return; }
+    lostBtn.disabled = true;
+    try {
+      const { from, to, $from } = ed.state.selection;
+      let existing: string | null = null;
+      ed.state.doc.nodesBetween(from, Math.max(to, Math.min(from + 1, ed.state.doc.content.size)), nd => {
+        const marked = nd.marks.find(x => x.type.name === "marker");
+        if (marked) existing = marked.attrs.id;
+        if (nd.type.name === "pin") existing = nd.attrs.id;
+      });
+      const old = existing ? state.markers.get(existing) : null;
+      const text = ed.state.doc.textBetween(from, to, " ").trim() || $from.parent.textContent.slice(0,2000);
+      const m = old || newMarker(id, text, "question");
+      if (m.thread.at(-1)?.text === LOST) { toast("Already captured. Tap its marker to work through it."); return; }
+      const next = {...m, mastery: 0 as const, due: Date.now(), recallOff: false,
+        recallQ: m.recallQ || "What was unclear here, and how would you explain it now?",
+        thread: [...m.thread, {role: "user" as const, text: LOST, at: Date.now()}]};
+      await putMarker(next);
+      if (!old) ed.chain().focus().insertContentAt(to, {type:"pin", attrs:{id:m.id}}).run();
+      repaintAll(); lightUp();
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) lostBtn.animate([
+        {boxShadow:'0 0 0 0 rgba(255,113,140,.6)', transform:'scale(.94)'},
+        {boxShadow:'0 0 0 18px rgba(255,113,140,0)', transform:'scale(1)'}
+      ], {duration:650,easing:'cubic-bezier(.16,1,.3,1)'});
+      toast("Captured here. Keep listening — revisit this marker's Journey later.");
+    } catch { toast("Couldn't capture this point. Please try again."); }
+    finally { lostBtn.disabled = false; }
+  };
+
   plusBtn.onclick = () => {
     if (!ed) return;
     const m = newMarker(id, "", "note");
