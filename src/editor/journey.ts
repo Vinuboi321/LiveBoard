@@ -6,36 +6,51 @@ import { esc, toast } from '../util';
 // Plain Markdown keeps these entries readable in exports, older clients and sync merges.
 export const LOST = '◌ Lost me here';
 const THEN = '**I thought**\n', NOW = '\n\n**Now I understand**\n';
-const drafts = new Map<string, {before:string;after:string}>();
+export function understanding(m: Marker): NonNullable<Marker['understanding']> {
+  if (m.understanding) return m.understanding;
+  const last = [...m.thread].reverse().find(t => t.text === LOST || (t.role === 'self' && (t.journey || t.text.startsWith(THEN))));
+  return last && last.text !== LOST ? 'understood' : 'unresolved';
+}
 export function journeyHTML(m: Marker) {
-  const d = drafts.get(m.id) || {before:'',after:''};
-  const entries = m.thread.filter(t => t.text === LOST || (t.role === 'self' && t.text.startsWith(THEN)));
+  const d = m.journeyDraft || {before:'',after:''};
+  const entries = m.thread.filter(t => t.text === LOST || (t.role === 'self' && (t.journey || t.text.startsWith(THEN))));
   return `<section class="journey"><h3>Watch your thinking change.</h3><p class="sub">Keep the wrong turn. It makes the breakthrough useful.</p>
+    <div class="journey-status" role="group" aria-label="Understanding progress">${(['unresolved','working','understood'] as const).map(k=>`<button class="btn2" data-understanding="${k}" aria-pressed="${understanding(m)===k}">${{unresolved:'◌ Unresolved',working:'◐ Working through',understood:'● Understood'}[k]}</button>`).join('')}</div>
     <div class="thoughttrail">${entries.map(t => {
       if (t.text === LOST) return `<article class="thoughtlost"><span>◌</span><div><b>Lost me here</b><small>${esc(new Date(t.at).toLocaleString())}</small></div></article>`;
-      const parts=t.text.slice(THEN.length).split(NOW);
+      const parts=t.journey ? [t.journey.before,t.journey.after] : t.text.slice(THEN.length).split(NOW);
       return `<article class="thoughtshift"><small>${esc(new Date(t.at).toLocaleString())}</small><div class="thoughtpair"><div><label>I thought</label><p>${esc(parts[0])}</p></div><span aria-hidden="true">↝</span><div><label>Now I understand</label><p>${esc(parts.slice(1).join(NOW))}</p></div></div></article>`;
     }).join('') || '<p class="wsnote">No breakthroughs yet. Start with what feels uncertain.</p>'}</div>
     <form id="journeyForm"><label>I originally thought<textarea id="thoughtBefore" maxlength="3000" required placeholder="The idea I had…">${esc(d.before)}</textarea></label><label>Now I understand<textarea id="thoughtAfter" maxlength="3000" required placeholder="What changed, and why…">${esc(d.after)}</textarea></label><button class="btn1">Save breakthrough ↝</button><p class="sub">Saved in this marker. Mastery still comes from recall.</p></form></section>`;
 }
-export function bindJourney(root: HTMLElement, m: Marker, save: (patch: Partial<Marker>)=>Promise<void>) {
+export function bindJourney(root: HTMLElement, m: Marker, save: (patch: Partial<Marker>, rerender?: boolean)=>Promise<void>) {
   const form=root.querySelector<HTMLFormElement>('#journeyForm'); if(!form)return;
   const before=form.querySelector<HTMLTextAreaElement>('#thoughtBefore')!,after=form.querySelector<HTMLTextAreaElement>('#thoughtAfter')!;
+  root.querySelectorAll<HTMLButtonElement>('[data-understanding]').forEach(button => button.onclick=()=>{
+    save({understanding:button.dataset.understanding as Marker['understanding']}).catch(()=>toast('Could not save progress. Please try again.'));
+  });
+  let saving: Promise<void> = Promise.resolve(), sequence=0;
   before.oninput=after.oninput=()=>{
-    drafts.set(m.id,{before:before.value,after:after.value});
-    const status=root.querySelector('.saved'); if(status)status.textContent='Draft · save your breakthrough to keep it';
+    const revision=++sequence;
+    const status=root.querySelector('.saved'); if(status)status.textContent='Saving Journey draft…';
+    saving=save({journeyDraft:{before:before.value,after:after.value,at:Math.max(Date.now(),(state.markers.get(m.id)?.journeyDraft?.at||0)+1)}},false);
+    saving.then(()=>{if(revision===sequence && status?.isConnected)status.textContent='Journey draft saved on this device';})
+      .catch(()=>{if(revision===sequence && status?.isConnected)status.textContent='Draft could not save — keep this window open';});
   };
-  if(before.value || after.value) { const status=root.querySelector('.saved'); if(status)status.textContent='Draft · save your breakthrough to keep it'; }
+  if(before.value || after.value) { const status=root.querySelector('.saved'); if(status)status.textContent='Journey draft saved on this device'; }
   form.onsubmit=async e=>{
     e.preventDefault(); if(!before.value.trim()||!after.value.trim())return;
     const button=form.querySelector('button')!; button.disabled=true;
+    const beforeText=before.value.trim(), afterText=after.value.trim();
+    before.readOnly=after.readOnly=true;
     const latest=state.markers.get(m.id); if(!latest||latest.deleted)return;
     try {
-      const text=THEN+before.value.trim()+NOW+after.value.trim();
-      drafts.delete(m.id);
-      await save({thread:[...latest.thread,{role:'self',text,at:Date.now()}]});
+      const text=THEN+beforeText+NOW+afterText;
+      await saving;
+      const base=state.markers.get(m.id); if(!base || base.deleted)return;
+      await save({understanding:'understood',journeyDraft:{before:'',after:'',at:Math.max(Date.now(),(base.journeyDraft?.at||0)+1)},thread:[...base.thread,{role:'self',text,at:Date.now(),journey:{before:beforeText,after:afterText}}]});
       toast('Breakthrough saved. Your earlier thinking stays with it.');
-    } catch { drafts.set(m.id,{before:before.value,after:after.value}); button.disabled=false; toast('Could not save. Your writing is still here.'); }
+    } catch { before.readOnly=after.readOnly=false; button.disabled=false; toast('Could not save. Your writing is still here.'); }
   };
 }
 let comparison: HTMLElement|null=null;

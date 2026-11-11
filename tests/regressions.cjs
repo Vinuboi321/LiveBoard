@@ -13,7 +13,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
   await p.route("**/api/marker", r => r.request().method() === "GET"
     ? r.fulfill({ json: { ai: true, model: "mock" } })
-    : r.fulfill({ json: { kind: "insert", type: "explain", markdown: "Inserted explanation for testing.", recall: { q: "Mock question?", a: "Mock answer." } } }));
+    : r.fulfill({ json: { sources:[{field:"passage",quote:r.request().postDataJSON().passage}], kind: "insert", type: "explain", markdown: "Inserted explanation for testing.", recall: { q: "Mock question?", a: "Mock answer." } } }));
   const home = async () => { await p.evaluate(() => { location.hash = ""; }); await p.waitForSelector("#dial"); await p.waitForTimeout(400); };
   const select = async (re, chars = 16) => {
     await p.evaluate(({ src, n }) => {
@@ -66,6 +66,9 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await select(/derivative/, 22);
   await p.click(".floatbtn.place");
   await p.waitForSelector(".mws");
+  await p.fill('#mIn','Explain using my note'); await p.click('#aGo');
+  await p.waitForSelector('.answer-sources');
+  ok((await p.textContent('.answer-sources summary')).includes('Quoted from your note'),'AI response exposes its source quotes');
   const chips = await p.$$eval(".sugg button", bs => bs.map(x => x.textContent));
   ok(chips.includes("Show the steps"), `contextual actions fit math (${chips.slice(0, 3).join(", ")})`);
   await p.keyboard.press("Escape");
@@ -92,6 +95,8 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.waitForSelector(".mws blockquote");
   const quote = await p.textContent(".mws .wsanchor blockquote");
   ok(/The first derivative/.test(quote), `marker follows edits to its passage (“${quote.trim().slice(0, 32)}…”)`);
+
+  ok((await p.textContent('.answer-sources summary')).includes('Source changed'),'editing the source flags the older AI answer');
 
   /* 4. Delayed saves stay with their marker */
   await p.click("[data-tab='recall']");
@@ -223,10 +228,18 @@ const BASE = process.env.BASE || "http://localhost:4173";
   ok((await p.textContent(".thoughttrail")).includes("Lost me here"), "confusion appears in the marker journey");
   await p.fill("#thoughtBefore", "I thought a moving object always accelerates.");
   await p.fill("#thoughtAfter", "Acceleration changes velocity; constant velocity has zero acceleration.");
+  await p.waitForFunction(() => document.querySelector('.mws .saved')?.textContent.includes('Journey draft saved'));
+  await p.click('[data-understanding="working"]');
+  await p.waitForFunction(()=>document.querySelector('[data-understanding="working"]')?.getAttribute('aria-pressed')==='true');
+  await p.reload(); await p.waitForSelector("#editor .pin");
+  await p.click("#editor .pin"); await p.click('[data-tab="journey"]');
+  ok((await p.inputValue('#thoughtBefore')).includes('always accelerates') && (await p.inputValue('#thoughtAfter')).includes('zero acceleration'), 'unfinished Journey drafts survive a reload');
+  ok(await p.getAttribute('[data-understanding="working"]','aria-pressed') === 'true', 'understanding progress survives a reload');
   await p.click('#journeyForm button');
   await p.waitForSelector(".thoughtshift");
   await p.reload(); await p.waitForSelector("#editor .pin");
   await p.click("#editor .pin"); await p.click('[data-tab="journey"]');
+  ok(await p.getAttribute('[data-understanding="understood"]','aria-pressed') === 'true' && (await p.inputValue('#thoughtBefore')) === '', 'a breakthrough completes understanding and clears its durable draft');
   ok((await p.textContent(".thoughtshift")).includes("zero acceleration"), "both sides of a breakthrough survive a reload");
   await p.click("#mCompare");
   await p.selectOption("#comparePick", {index:1});
@@ -234,6 +247,13 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.keyboard.press("Escape");
   ok(!(await p.$(".compareveil")) && !!(await p.$(".mws:not(.closing)")), "Escape closes comparison and leaves the marker open");
   await p.keyboard.press("Escape");
+
+  await p.keyboard.press('Control+k'); await p.fill('#qIn','Velocity');
+  await p.check('#qUnresolved');
+  ok(await p.locator('.qrow2[data-m]').count()===0,'unfinished filter excludes understood markers');
+  await p.uncheck('#qUnresolved');
+  ok(await p.locator('.qrow2[data-m]').count()===1,'all-marker search still finds the understood point');
+  await p.keyboard.press('Escape');
 
   // Scale: a folder holding far more than the dial shows opens into a shelf of everything, searchable.
   await p.evaluate(async () => {

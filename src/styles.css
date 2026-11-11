@@ -1022,3 +1022,10 @@ button.moutlabel:hover, .moutsrc:hover { color: var(--tc, var(--ink)); }
 @keyframes thoughtUnfold { from { opacity:0; transform:perspective(900px) rotateX(-7deg) translateY(14px); } to { opacity:1; transform:none; } }
 @media(max-width:600px){.comparepair{grid-template-columns:1fr}.compareboard{padding:16px}.thoughtpair{grid-template-columns:1fr}.thoughtpair>span{transform:rotate(90deg);justify-self:center}}
 @media(prefers-reduced-motion:reduce){.thoughtshift,.compareboard{animation:none}}
+.journey-status { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.journey-status button[aria-pressed="true"] { border-color:var(--tc); color:var(--tc); background:color-mix(in srgb,var(--tc) 12%,transparent); }
+.unresolved-filter { display:flex; gap:8px; align-items:center; padding:10px 20px; font-size:13px; color:var(--muted); }
+.answer-sources { margin:14px 0; border-top:1px solid var(--line); padding-top:10px; font-size:13px; }
+.answer-sources summary { cursor:pointer; color:var(--tc); }
+.answer-sources blockquote { margin:12px 0; border-left:2px solid var(--tc); padding-left:12px; }
+.answer-sources small { color:var(--muted); }

@@ -17,7 +17,7 @@ const wait = async url => { for (let i = 0; i < 60; i++) { try { const r = await
   process.on("exit", stop);
   await wait("http://localhost:4173");
   await wait("http://localhost:4174");
-  const suites = ["tests/api.cjs", "tests/e2e.cjs", "tests/regressions.cjs", "tests/safety.cjs", "tests/sync.cjs"];
+  const suites = ["tests/store-races.cjs", "tests/api.cjs", "tests/e2e.cjs", "tests/regressions.cjs", "tests/safety.cjs", "tests/sync.cjs"];
   const failed = suites.filter(s => { console.log(`\n=== ${s} ===`); return !run("node", [s]); });
   if (spawnSync("createdb", ["--version"]).status === 0) { console.log("\n=== tests/sql/run.sh ==="); if (!run("bash", ["tests/sql/run.sh"])) failed.push("tests/sql/run.sh"); }
   else console.log("\n(skipping SQL checks: no local Postgres)");

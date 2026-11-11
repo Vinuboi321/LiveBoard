@@ -115,7 +115,9 @@ export function validateBackup(text: string): ValidBackup {
     if (m.thread !== undefined && (!Array.isArray(m.thread) || m.thread.length > LIMITS.thread)) fail(`${where}'s conversation is damaged.`);
     const thread: ThreadMsg[] = ((m.thread as unknown[]) || []).map(t => {
       if (!isObj(t) || !["user", "marker", "self"].includes(String(t.role))) return fail(`${where}'s conversation is damaged.`);
-      return { role: t.role as ThreadMsg["role"], text: str(t.text, 20000, "A message", true) || "", at: num(t.at, "A message date", 0), inserted: !!t.inserted, calc: str(t.calc, 500, "A calculation", true), result: str(t.result, 500, "A result", true) };
+      return { sourcePassage: str(t.sourcePassage,1500,"Answer source",true) ?? undefined,
+        sources: Array.isArray(t.sources) ? t.sources.slice(0,3).filter(s=>isObj(s)&&["passage","before","after"].includes(String(s.field))&&typeof s.quote==="string").map(s=>({field:s.field as "passage"|"before"|"after",quote:str(s.quote,600,"Source quote",true)||""})) : undefined,
+        journey: isObj(t.journey) ? {before:str(t.journey.before,50000,"Earlier thinking",true)||"",after:str(t.journey.after,50000,"Current understanding",true)||""} : undefined, role: t.role as ThreadMsg["role"], text: str(t.text, 20000, "A message", true) || "", at: num(t.at, "A message date", 0), inserted: !!t.inserted, calc: str(t.calc, 500, "A calculation", true), result: str(t.result, 500, "A result", true) };
     });
     let outputs: Marker["outputs"] | undefined;
     if (isObj(m.outputs)) {
@@ -132,6 +134,8 @@ export function validateBackup(text: string): ValidBackup {
       mastery, due: num(m.due, `${where}'s due date`, Date.now()), ivl: Math.min(3650, Math.max(0, num(m.ivl, `${where}'s interval`, 1))),
       linkNoteId: typeof m.linkNoteId === "string" && ID.test(m.linkNoteId) ? m.linkNoteId : null,
       links: Array.isArray(m.links) ? m.links.filter((x): x is string => typeof x === "string" && ID.test(x)).slice(0, 100) : undefined,
+      understanding: ["unresolved","working","understood"].includes(String(m.understanding)) ? m.understanding as Marker["understanding"] : undefined,
+      journeyDraft: isObj(m.journeyDraft) ? {before:str(m.journeyDraft.before,50000,"Journey draft",true)||"",after:str(m.journeyDraft.after,50000,"Journey draft",true)||"",at:num(m.journeyDraft.at,"Journey draft date",0)} : undefined,
       draft: str(m.draft, 50000, `${where}'s draft`, true) || undefined, recallOff: !!m.recallOff,
       passageEditedAt: typeof m.passageEditedAt === "number" ? m.passageEditedAt : null, remindAt: typeof m.remindAt === "number" ? m.remindAt : null,
       detachedAt: typeof m.detachedAt === "number" ? m.detachedAt : null, outputs,

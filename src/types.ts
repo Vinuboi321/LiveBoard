@@ -29,10 +29,15 @@ export interface Note {
   deleted?: boolean;
 }
 
+export interface SourceQuote { field: "passage" | "before" | "after"; quote: string }
+
 export interface ThreadMsg {
+  sources?: SourceQuote[];
+  sourcePassage?: string;
   role: "user" | "marker" | "self"; // self = the student's own answer or kept writing
   text: string; // markdown for marker replies
   at: number;
+  journey?: { before: string; after: string };
   inserted?: boolean; // this reply was written into the note
   calc?: string | null;
   result?: string | null;
@@ -51,6 +56,8 @@ export interface Marker {
   ivl: number; // spaced-repetition interval in days
   linkNoteId?: string | null;
   links?: string[]; // other markers this one is connected to (two-way)
+  understanding?: "unresolved" | "working" | "understood";
+  journeyDraft?: { before: string; after: string; at: number };
   draft?: string; // unfinished writing in the Write tab
   recallOff?: boolean; // left out of daily recall
   passageEditedAt?: number | null; // the marked words changed after the recall question was written
@@ -85,6 +92,7 @@ export interface Meta {
 }
 
 export interface AIResult {
+  sources?: SourceQuote[];
   kind: "insert" | "answer";
   type: MarkerType;
   markdown: string;

@@ -7,7 +7,7 @@ import { TaskList, TaskItem } from "@tiptap/extension-list";
 import { Diagram, MarkerMark, MarkerOutput, Pin, repaintAll } from "./extensions";
 import { aiAvailable, closeBox, contextActions, openBox, runIntent, setOpenNote, setPendingOpen, takePendingOpen, TYPE_INFO } from "./markerBox";
 import { dropFreeMarker, giveOutputIds, markRange, moveFreeMarker, outputsInDoc, pinIds, setEditor } from "./ops";
-import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, onRemote, patchNote, putMarker, putMeta, putNote, reconcilePins, state } from "../store";
+import { courseColor, deleteNote, liveCourses, liveMarkers, markersOf, newCourse, newMarker, note, onChange, onRemote, patchNote, putMarker, putMeta, putNote, recordOpened, reconcilePins, state } from "../store";
 import type { Marker, Note } from "../types";
 import { fingerprint, gradeMarker } from "../study";
 import { findCandidates, type Candidate } from "./suggest";
@@ -55,7 +55,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   if (!n0 || n0.deleted) { goHome(); return; }
   setOpenNote(openNote);
   let n: Note = { ...n0, openedAt: Date.now() };
-  putNote(n, false);
+  recordOpened(id);
   /** The server revision the editor's content is built on. If sync replaces the note underneath, a save keeps both versions. */
   let baseRev = n0.rev ?? 0;
   /** The saved version the editor's content is built on; another tab or device saving a newer one counts as a change underneath. */
@@ -357,7 +357,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       const text = ed.state.doc.textBetween(from, to, " ").trim() || $from.parent.textContent.slice(0,2000);
       const m = old || newMarker(id, text, "question");
       if (m.thread.at(-1)?.text === LOST) { toast("Already captured. Tap its marker to work through it."); return; }
-      const next = {...m, mastery: 0 as const, due: Date.now(), recallOff: false,
+      const next = {...m, understanding: "unresolved" as const, mastery: 0 as const, due: Date.now(), recallOff: false,
         recallQ: m.recallQ || "What was unclear here, and how would you explain it now?",
         thread: [...m.thread, {role: "user" as const, text: LOST, at: Date.now()}]};
       await putMarker(next);

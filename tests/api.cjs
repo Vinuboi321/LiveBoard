@@ -9,7 +9,7 @@ const handler = load();
 
 const BASE_ENV = { ANTHROPIC_API_KEY: "sk-test", SUPABASE_URL: "https://db.test", SUPABASE_ANON_KEY: "anon", VERCEL_ENV: "production" };
 const GOOD_BODY = { intent: "explain this", passage: "Glycolysis splits glucose.", before: "", after: "", note: "Glycolysis splits glucose.", title: "Bio", course: "BIO", thread: [] };
-const MODEL_OK = { content: [{ type: "tool_use", name: "marker_result", input: { kind: "answer", type: "explain", markdown: "It breaks glucose into two pyruvate.", recall: { q: "What does glycolysis make?", a: "Two pyruvate." } } }] };
+const MODEL_OK = { content: [{ type: "tool_use", name: "marker_result", input: { sources:[{field:"passage",quote:"Glycolysis splits glucose."},{field:"passage",quote:"An invented claim"},{field:"url",quote:"https://evil.test"}], kind: "answer", type: "explain", markdown: "It breaks glucose into two pyruvate.", recall: { q: "What does glycolysis make?", a: "Two pyruvate." } } }] };
 
 async function call({ env = {}, method = "POST", body = GOOD_BODY, headers = { authorization: "Bearer good" }, auth = "ok", quota = { allowed: true, used: 1 }, model = "ok" } = {}) {
   const saved = { ...process.env };
@@ -91,6 +91,7 @@ async function call({ env = {}, method = "POST", body = GOOD_BODY, headers = { a
   if (health.status === 200 && health.json.ai === false) console.log("ok   health check reports AI off when sign-in checks are missing");
   else errs.push("health check should report ai:false without Supabase config: " + JSON.stringify(health.json));
   const good = await call({});
+  if(good.json.sources?.length===1 && good.json.sources[0].quote===GOOD_BODY.passage)console.log('ok   only exact quotes from supplied source fields are returned');else errs.push('invalid source quotes were accepted');
   const shape = good.json && typeof good.json.markdown === "string" && ["insert", "answer"].includes(good.json.kind) && good.json.recall?.q;
   if (shape) console.log("ok   successful replies are validated and shaped"); else errs.push("reply shape: " + JSON.stringify(good.json));
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL API CHECKS PASS");

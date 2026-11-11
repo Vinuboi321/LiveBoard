@@ -285,7 +285,14 @@ export function mergeMarkers(a: Marker, b: Marker): Marker {
     outputs[oid] = [...uniq.values()].sort((x, y) => x.at - y.at).slice(-12);
   }
   const draft = a.draft && b.draft && a.draft !== b.draft ? `${newer.draft}\n\n${newer === a ? b.draft : a.draft}` : a.draft || b.draft;
-  return { ...newer, thread, outputs, draft, links: [...new Set([...(a.links || []), ...(b.links || [])])], deleted: !!(a.deleted && b.deleted), mastery: newer.mastery, due: newer.due };
+  const ja=a.journeyDraft, jb=b.journeyDraft;
+  let journeyDraft = !ja ? jb : !jb ? ja : ja.at >= jb.at ? ja : jb;
+  // Keep both unfinished explanations on a real concurrent conflict. A newer clear stays cleared.
+  if(ja && jb && ja.before+ja.after && jb.before+jb.after && (ja.before!==jb.before || ja.after!==jb.after)) {
+    const combine=(x:string,y:string)=>x===y?x:[x,y].filter(Boolean).join("\n\n— From another device —\n\n");
+    journeyDraft={before:combine(ja.before,jb.before),after:combine(ja.after,jb.after),at:Math.max(ja.at,jb.at)};
+  }
+  return { ...newer, thread, outputs, draft, journeyDraft, links: [...new Set([...(a.links || []), ...(b.links || [])])], deleted: !!(a.deleted && b.deleted), mastery: newer.mastery, due: newer.due };
 }
 
 /* ---------- download ---------- */

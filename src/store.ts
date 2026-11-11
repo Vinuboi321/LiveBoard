@@ -127,7 +127,11 @@ async function write(kind: Kind, rec: Note | Marker | Course) {
   if (state.blocked.get(key) !== "erased") state.blocked.delete(key); // an edit is worth trying again, unless the account was erased
   const erased = state.blocked.get(key) === "erased";
   await db.transaction("rw", table(kind), db.outbox, async () => {
-    await table(kind).put(rec);
+    const disk = await table(kind).get(rec.id);
+    const stored = { ...rec, rev: maxRev(disk?.rev, rec.rev) };
+    await table(kind).put(stored);
+    const map = state[kind] as Map<string, Note | Marker | Course>;
+    if (map.get(rec.id) === rec) map.set(rec.id, stored);
     await db.outbox.put({ key, kind, id: rec.id, ver: rec.updatedAt, at: Date.now(), blocked: erased ? "erased" : null });
   });
   announce(kind, rec.id);
@@ -140,6 +144,17 @@ export async function putNote(n: Note, touch = true) {
   const rec: Note = { ...n, rev: maxRev(cur?.rev, n.rev), updatedAt: touch ? Math.max(Date.now(), (cur?.updatedAt || 0) + 1) : n.updatedAt };
   state.notes.set(rec.id, rec);
   await write("notes", rec);
+  emit("notes");
+}
+/** Reading a note changes local recency, never creates an upload that can overwrite newer remote content. */
+export async function recordOpened(id: string) {
+  const cur=state.notes.get(id); if(!cur)return;
+  const at=Date.now();
+  state.notes.set(id,{...cur,openedAt:at});
+  await db.transaction("rw",db.notes,async()=>{
+    const saved=await db.notes.get(id);
+    if(saved)await db.notes.put({...saved,openedAt:Math.max(saved.openedAt||0,at)});
+  });
   emit("notes");
 }
 /** Update fields of a note in place, on top of whatever is stored now. */
@@ -261,13 +276,19 @@ export async function ack(kind: Kind | "meta", id: string, ver: number, rev?: nu
   const key = `${kind}:${id}`;
   await db.transaction("rw", kind === "meta" ? db.meta : table(kind as Kind), db.outbox, async () => {
     const o = await db.outbox.get(key);
-    if (o && o.ver === ver) { await db.outbox.delete(key); state.pending.delete(key); state.blocked.delete(key); }
+    const changed = () => kind === "meta" ? state.meta.updatedAt > ver : ((state[kind].get(id)?.updatedAt || 0) > ver);
+    if (o && o.ver === ver && !changed()) {
+      await db.outbox.delete(key);
+      if (!changed()) { state.pending.delete(key); state.blocked.delete(key); }
+    }
     if (kind !== "meta" && rev !== undefined) {
       const cur = await table(kind).get(id);
       if (cur && (cur.rev ?? 0) < rev) {
         const next = { ...cur, rev };
         await table(kind).put(next);
-        (state[kind] as Map<string, Note | Marker | Course>).set(id, next);
+        const map = state[kind] as Map<string, Note | Marker | Course>;
+        const latest = map.get(id) || next;
+        map.set(id, { ...latest, rev: maxRev(latest.rev, rev) });
       }
     }
   });
@@ -276,15 +297,25 @@ export async function ack(kind: Kind | "meta", id: string, ver: number, rev?: nu
 /** Take the server's version of records. Records with unconfirmed local changes are skipped; their upload resolves the conflict. */
 export async function applyRemote(kind: Kind, rows: (Note | Marker | Course)[], force = false) {
   const map = state[kind] as Map<string, Note | Marker | Course>;
-  const winners = rows.filter(r => force || !state.pending.has(`${kind}:${r.id}`)).map(r => kind === "courses" ? { ...r, color: safeColor((r as Course).color) } : r);
-  if (!winners.length) return;
+  const observed = new Map(rows.map(r => [r.id, map.get(r.id)?.updatedAt]));
+  const unchanged = (id: string) => map.get(id)?.updatedAt === observed.get(id);
+  let winners: (Note | Marker | Course)[] = [];
   await db.transaction("rw", table(kind), db.outbox, async () => {
+    winners = rows.filter(r => unchanged(r.id) && (force || !state.pending.has(`${kind}:${r.id}`)))
+      .map(r => kind === "courses" ? { ...r, color: safeColor((r as Course).color) } : kind === "notes" ? {...r,openedAt:Math.max((r as Note).openedAt||0,(map.get(r.id) as Note)?.openedAt||0)} : r);
     await table(kind).bulkPut(winners);
-    if (force) for (const r of winners) { await db.outbox.delete(`${kind}:${r.id}`); state.pending.delete(`${kind}:${r.id}`); state.blocked.delete(`${kind}:${r.id}`); }
+    if (force) for (const r of winners) {
+      if (!unchanged(r.id)) continue;
+      await db.outbox.delete(`${kind}:${r.id}`);
+      if (unchanged(r.id)) { state.pending.delete(`${kind}:${r.id}`); state.blocked.delete(`${kind}:${r.id}`); }
+    }
   });
-  winners.forEach(r => map.set(r.id, r));
-  emit(kind);
-  remoteListeners.forEach(fn => fn(kind, winners.map(r => r.id)));
+  const applied = winners.filter(r => unchanged(r.id) && (force || !state.pending.has(`${kind}:${r.id}`)));
+  applied.forEach(r => map.set(r.id, kind === "notes" ? {...r,openedAt:Math.max((r as Note).openedAt||0,(map.get(r.id) as Note)?.openedAt||0)} : r));
+  if (applied.length) {
+    emit(kind);
+    remoteListeners.forEach(fn => fn(kind, applied.map(r => r.id)));
+  }
 }
 export async function applyRemoteMeta(patch: Partial<Meta>) {
   state.meta = { ...state.meta, ...patch };

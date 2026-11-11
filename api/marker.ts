@@ -32,6 +32,7 @@ Decide where your result belongs:
 - kind "answer": a reply to a question about the passage that the student may or may not want in the note. Keep it short and direct.
 
 Rules:
+- Include up to three verbatim supporting quotes in "sources", identifying "passage", "before", or "after". Use only exact text from the supplied field, never paraphrases. If using general knowledge without supporting note text, return an empty sources array.
 - Ground everything in the passage and the note context. If the note does not support a claim and it is standard course knowledge, you may use it, but never invent course-specific facts (dates, policies, what the professor said).
 - Never compute numeric results yourself. When arithmetic or algebra is needed, put a single mathjs-compatible expression in "calc" (for example: "e^0.5 * 0.5^4 / factorial(4)") and refer to its result in words; the app evaluates it with a math engine and fills it in.
 - For a requested diagram, flowchart, cycle or timeline, put Mermaid source in "mermaid" (flowchart TD or LR, under 15 nodes, short labels) and use "markdown" for a one-line caption.
@@ -47,6 +48,7 @@ const TOOL = {
   input_schema: {
     type: "object",
     properties: {
+      sources: { type: "array", maxItems: 3, items: { type: "object", properties: { field: {type: "string", enum: ["passage","before","after"]}, quote: {type:"string",maxLength:600} }, required:["field","quote"] } },
       kind: { type: "string", enum: ["insert", "answer"] },
       type: { type: "string", enum: TYPES },
       markdown: { type: "string" },
@@ -194,7 +196,15 @@ export default async function handler(req: Req, res: Res) {
     const out = block?.input && typeof block.input === "object" ? block.input : null;
     if (!out || typeof out.markdown !== "string") return done(502, { error: "The AI didn't return a usable result. Try rephrasing." });
     const recall = out.recall && typeof out.recall === "object" ? out.recall as { q?: unknown; a?: unknown } : null;
+    const sources = (Array.isArray(out.sources) ? out.sources : []).slice(0,3).flatMap(value => {
+      if (!value || typeof value !== "object") return [];
+      const s = value as {field?:unknown;quote?:unknown};
+      if (!["passage","before","after"].includes(String(s.field)) || typeof s.quote !== "string" || !s.quote.trim() || s.quote.length > 600) return [];
+      const field = s.field as "passage" | "before" | "after";
+      return b[field].includes(s.quote) ? [{field,quote:s.quote}] : [];
+    });
     return done(200, {
+      sources,
       kind: out.kind === "insert" ? "insert" : "answer",
       type: TYPES.includes(String(out.type)) ? out.type : "explain",
       markdown: clip(out.markdown, 8000),

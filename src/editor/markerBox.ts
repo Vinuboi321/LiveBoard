@@ -2,7 +2,7 @@ import { bindJourney, journeyHTML, compareMarker, closeComparison } from "./jour
 import { bindResize, markerSize } from "./resizeCard";
 import { aiHealth, askMarker, evaluate, localIntent, type LocalAction } from "../ai";
 import { mdToHtml } from "../md";
-import { course, courseName, liveMarkers, liveNotes, newMarker, newNote, note, putCourse, putMarker, putNote, state } from "../store";
+import { course, courseName, liveMarkers, liveNotes, newMarker, newNote, note, putCourse, putMarker, putNote, state, onChange } from "../store";
 import type { Marker, MarkerType, Mastery, ThreadMsg } from "../types";
 import { $, agoLong, armButton, DAY, debounce, esc, toast } from "../util";
 import { repaintAll } from "./extensions";
@@ -213,9 +213,24 @@ function threadHTML(items: [ThreadMsg, number][]) {
     const body = t.text ? `<div class="mmd">${mdToHtml(t.text)}</div>` : "";
     const who = t.role === "self" ? `<span class="who">Your answer</span>` : "";
     const act = t.inserted ? `<span class="mnote">In your note</span>` : (t.text || t.calc) && !t.text.startsWith("⚠") ? `<button class="mlink" data-add="${i}">Add to note ↗</button>` : "";
-    return `<div class="ta ${t.role}">${who}${body}${calc}${act}</div>`;
+    const context = current ? contextAround(current.id) : {before:'',after:''};
+    const changed = t.sourcePassage !== undefined && current && (current.text.slice(0,1500) !== t.sourcePassage || t.sources?.some(s => !(s.field === 'passage' ? current!.text : context[s.field]).includes(s.quote)));
+    const evidence = t.sourcePassage === undefined ? '' : `<details class="answer-sources" data-source-index="${i}"><summary>${changed ? 'Source changed · review this answer' : t.sources?.length ? 'Quoted from your note' : 'No note citations supplied'}</summary>${t.sources?.map(s=>`<blockquote><small>${{passage:'Marked passage',before:'Before the marker',after:'After the marker'}[s.field]}</small><p>${esc(s.quote)}</p></blockquote>`).join('') || '<p class="sub">This response has no matching source quotes. Check it against your material.</p>'}<p class="sub">Quotes match the supplied text; this does not verify the explanation.</p><button class="textlink" data-source-jump>Show marker in note ↗</button></details>`;
+    return `<div class="ta ${t.role}">${who}${body}${calc}${evidence}${act}</div>`;
   }).join("")}${busy ? `<div class="ta thinking"><i></i><i></i><i></i><span class="tw" aria-hidden="true"><em>Reading your note</em><em>Connecting the dots</em><em>Writing it down</em></span></div>` : ""}</div>`;
 }
+
+// Update provenance labels without rebuilding the student's in-progress form.
+onChange(kind => {
+  if (!ws || !current || (kind !== 'notes' && kind !== 'markers')) return;
+  const latest=state.markers.get(current.id); if(!latest)return;
+  const ctx=contextAround(latest.id);
+  ws.querySelectorAll<HTMLElement>('[data-source-index]').forEach(el=>{
+    const t=latest.thread[Number(el.dataset.sourceIndex)]; if(!t || t.sourcePassage===undefined)return;
+    const changed=latest.text.slice(0,1500)!==t.sourcePassage || t.sources?.some(s=>!(s.field==='passage'?latest.text:ctx[s.field]).includes(s.quote));
+    const summary=el.querySelector('summary');if(summary)summary.textContent=changed?'Source changed · review this answer':t.sources?.length?'Quoted from your note':'No note citations supplied';
+  });
+});
 
 function render() {
   if (!ws || !current) return;
@@ -314,6 +329,7 @@ function bindCommon() {
     if (m) await putMarker({ ...m, deleted: true });
     toast("Marker deleted.");
   });
+  ws.querySelectorAll<HTMLButtonElement>("[data-source-jump]").forEach(b => b.onclick = () => { if(current) revealPin(current.id); });
   ws.querySelectorAll<HTMLButtonElement>("[data-add]").forEach(b => b.onclick = () => addToNote(Number(b.dataset.add)));
 }
 
@@ -536,7 +552,7 @@ const TEMPLATES: Record<string, string> = {
 function bindTab() {
   if (!ws || !current) return;
   const m = current;
-  if (tab === "journey") bindJourney(ws, m, patch => updateMarker(m.id, patch));
+  if (tab === "journey") bindJourney(ws, m, (patch, rerender) => updateMarker(m.id, patch, rerender));
   if (tab === "write") {
     const ta = $("#wDraft", ws) as HTMLTextAreaElement, mood = $("#wMood", ws)!, count = $("#wCount", ws)!;
     let lastWords = -1;
@@ -812,7 +828,7 @@ async function run(said: string) {
     const res = await askMarker({ intent: said, passage: withUser.text, before: ctx.before, after: ctx.after, note: ctx.note, title: n?.title || "", course: courseName(n?.courseId), thread: withUser.thread.slice(0, -1) });
     let result: string | null = null;
     if (res.calc) { try { result = await evaluate(res.calc); } catch { result = null; } }
-    reply = msg("marker", res.markdown, { calc: res.calc && result ? res.calc : null, result });
+    reply = msg("marker", res.markdown, { sources: res.sources || [], sourcePassage: withUser.text.slice(0,1500), calc: res.calc && result ? res.calc : null, result });
     if (res.kind === "insert") reply.inserted = insertOutput(id, res.markdown, { mermaid: res.mermaid, calcLine: res.calc && result ? `${res.calc} = ${result}` : null });
     patch = { recallQ: res.recall?.q || withUser.recallQ || null, recallA: res.recall?.a || withUser.recallA || null };
     if (withUser.type !== "link" && withUser.type !== "reminder") patch.type = res.type;

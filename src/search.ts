@@ -1,3 +1,4 @@
+import { understanding } from "./editor/journey";
 import { courseColor, courseName, liveMarkers, liveNotes, note, state } from "./store";
 import type { Marker } from "./types";
 import { $, agoLong, esc } from "./util";
@@ -12,6 +13,7 @@ let openNoteFn: (id: string) => void = () => {};
 function fields(m: Marker): [string, string][] {
   const f: [string, string][] = [];
   if (m.text) f.push(["Passage", m.text]);
+  if(m.journeyDraft) f.push(["Journey draft",m.journeyDraft.before+" "+m.journeyDraft.after]);
   if (m.draft?.trim()) f.push(["Draft", m.draft]);
   for (const t of m.thread) {
     if (!t.text && !t.calc) continue;
@@ -32,11 +34,12 @@ function snippet(text: string, terms: string[]) {
   return s;
 }
 
-function search(q: string) {
+function search(q: string, unresolved = false) {
   const terms = q.toLowerCase().split(/\s+/).filter(t => t.length > 1);
   if (!terms.length) return { markers: [] as Hit[], notes: [] as ReturnType<typeof liveNotes> };
   const markers: Hit[] = [];
   for (const m of liveMarkers()) {
+    if(unresolved && understanding(m)==='understood')continue;
     const f = fields(m), n = note(m.noteId);
     const hay = (f.map(x => x[1]).join(" ") + " " + (n?.title || "") + " " + courseName(n?.courseId)).toLowerCase();
     if (!terms.every(t => hay.includes(t))) continue;
@@ -58,18 +61,21 @@ export function openSearch(openNote: (id: string) => void) {
   panel.className = "searchwrap";
   panel.innerHTML = `<div class="searchbox" role="dialog" aria-label="Search your markers">
     <div class="qrow"><span aria-hidden="true">⌕</span><input id="qIn" placeholder="Search passages, drafts, answers, connections…" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <label class="unresolved-filter"><input type="checkbox" id="qUnresolved"> Unresolved and working-through markers</label>
     <div class="qres" id="qRes"></div></div>`;
   document.body.appendChild(panel);
   const inp = $("#qIn", panel) as HTMLInputElement, res = $("#qRes", panel)!;
+  const onlyUnresolved = $("#qUnresolved",panel) as HTMLInputElement;
   let sel = 0, items: HTMLElement[] = [];
   const draw = () => {
     const q = inp.value.trim();
     const terms = q.toLowerCase().split(/\s+/).filter(t => t.length > 1);
     if (!terms.length) {
-      const recent = [...liveMarkers()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
+      const recent = [...liveMarkers()].filter(m=>!onlyUnresolved.checked || understanding(m)!=='understood').sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
       res.innerHTML = recent.length ? `<div class="qhead">Recent markers</div>${recent.map(m => row({ m, score: 0, field: TYPE_INFO[m.type].label, text: m.text || m.draft || "A blank point" }, [])).join("")}` : `<p class="qempty">Place a marker and its thoughts become searchable here.</p>`;
     } else {
-      const r = search(q);
+      const r = search(q,onlyUnresolved.checked);
+      if(onlyUnresolved.checked)r.notes=[];
       res.innerHTML = (r.markers.length ? `<div class="qhead">Markers · ${r.markers.length}</div>${r.markers.map(h => row(h, terms)).join("")}` : "")
         + (r.notes.length ? `<div class="qhead">Notes</div>${r.notes.map(n => `<button class="qrow2" data-note="${n.id}"><i class="qdot" style="background:${courseColor(n.courseId)}"></i><span><b>${esc(n.title)}</b><small>${esc(courseName(n.courseId))} · opened ${agoLong(n.openedAt)}</small></span></button>`).join("")}` : "")
         || `<p class="qempty">Nothing matches “${esc(q)}”.</p>`;
@@ -90,6 +96,7 @@ export function openSearch(openNote: (id: string) => void) {
     if (b.dataset.m) { const m = state.markers.get(b.dataset.m); if (!m) return; setPendingOpen(m.id); closeSearch(); openNoteFn(m.noteId); }
     else if (b.dataset.note) { closeSearch(); openNoteFn(b.dataset.note); }
   };
+  onlyUnresolved.onchange = draw;
   inp.oninput = draw;
   inp.onkeydown = e => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {

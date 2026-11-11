@@ -49,6 +49,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.keyboard.press("Escape");
   ok((await noteCount()) === n0, "refused backups change nothing");
   const good = { app: "liveboard", version: 2, courses: [{ id: courseId, name: "Chem", color: "javascript:alert(1)", updatedAt: 1 }], notes: [{ id: "n2", courseId, title: "Restored acids", kind: "blank", doc: { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Acids donate protons." }] }] }, plain: "Acids donate protons.", createdAt: 1, updatedAt: 1, openedAt: Date.now() }], markers: [] };
+  good.markers.push({id:'journey-backup',noteId:'n2',type:'question',text:'Acids donate protons.',thread:[{role:'self',text:'A breakthrough',at:1,journey:{before:'Old idea',after:'New idea'}}],understanding:'working',journeyDraft:{before:'Unfinished idea',after:'',at:2},mastery:0,due:1,ivl:1,createdAt:1,updatedAt:2});
   await restore(file("good.json", good));
   await p.waitForSelector(".restorebox");
   ok(/1 note/.test(await p.textContent(".restorebox")), "a valid backup shows what it will add before restoring");
@@ -56,6 +57,8 @@ const BASE = process.env.BASE || "http://localhost:4173";
   await p.waitForTimeout(600);
   ok((await noteCount()) === n0 + 1, "restoring writes the backup");
   const color = await p.evaluate(() => new Promise(res => { const r = indexedDB.open("liveboard"); r.onsuccess = () => { const q = r.result.transaction("courses").objectStore("courses").get("c1"); q.onsuccess = () => { res(q.result?.color); r.result.close(); }; }; }));
+  const restoredJourney=await p.evaluate(()=>new Promise(res=>{const r=indexedDB.open('liveboard');r.onsuccess=()=>{const db=r.result,q=db.transaction('markers').objectStore('markers').get('journey-backup');q.onsuccess=()=>{res(q.result);db.close();};};}));
+  ok(restoredJourney?.understanding==='working' && restoredJourney?.journeyDraft.before==='Unfinished idea' && restoredJourney?.thread[0].journey.after==='New idea','backup restore preserves structured Journey progress, drafts and breakthroughs');
   ok(color === "#8892A0", `unsafe course colors are replaced (${color})`);
 
   /* A marker keeps its thinking when its passage is deleted */

@@ -11,7 +11,7 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
   const b = await chromium.launch();
   const fake = new FakeSupabase();
   const errs = [];
-  const ok = (c, msg) => { if (c) console.log("ok  ", msg); else errs.push(msg); };
+  const ok = (c, msg) => { if (c) console.log("ok  ", msg); else { console.error("FAIL ", msg); errs.push(msg); } };
 
   async function device() {
     const ctx = await b.newContext({ viewport: { width: 1300, height: 860 }, serviceWorkers: "block" });
@@ -145,6 +145,31 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
   await A.evaluate(() => dispatchEvent(new Event("online")));
   await A.waitForTimeout(1500);
   ok(/Edited on B/.test(await A.textContent("#editor")), "the open editor on device A shows the merged result without a reload");
+
+  // An unfinished Journey is a synced marker record, not an in-memory editor buffer.
+  await A.click('#captureLost');
+  await A.click('#editor .pin');
+  await A.click('[data-tab="journey"]');
+  await A.fill('#thoughtBefore','I used to confuse the two stages.');
+  await A.fill('#thoughtAfter','They have different roles in cell division.');
+  await A.waitForFunction(()=>document.querySelector('.mws .saved')?.textContent.includes('Journey draft saved'));
+  await A.click('[data-understanding="working"]');
+  await A.waitForFunction(()=>document.querySelector('[data-understanding="working"]')?.getAttribute('aria-pressed')==='true');
+  const journeyId=await A.getAttribute('#editor .pin','data-pin');
+  for(let i=0;i<60 && !JSON.stringify(serverNote(U1,'Offline lecture')?.data.doc).includes(journeyId);i++)await A.waitForTimeout(250);
+  ok(JSON.stringify(serverNote(U1,'Offline lecture')?.data.doc).includes(journeyId),'the Journey anchor reaches the server before the second device opens it');
+  await settled(A,U1);
+  await B.reload(); await B.waitForSelector('#editor .pin');
+  await B.click('#editor .pin'); await B.click('[data-tab="journey"]');
+  ok((await B.inputValue('#thoughtBefore')).includes('confuse the two stages'), 'unfinished Journey drafts reach a second device');
+  ok(await B.getAttribute('[data-understanding="working"]','aria-pressed')==='true', 'understanding state reaches a second device');
+  await B.click('#journeyForm button'); await B.waitForSelector('.thoughtshift'); await settled(B,U1);
+  await A.reload(); await A.waitForSelector('#editor .pin');
+  await A.click('#editor .pin'); await A.click('[data-tab="journey"]');
+  ok((await A.inputValue('#thoughtBefore'))==='' && (await A.textContent('.thoughtshift')).includes('different roles'), 'saved breakthrough syncs back without resurrecting its draft');
+  const learned=fake.all('markers',U1).find(r=>r.data.thread.some(t=>t.journey));
+  ok(learned?.data.understanding==='understood' && learned?.data.mastery===0, 'understanding is independent of recall mastery');
+  await A.keyboard.press('Escape'); await B.keyboard.press('Escape');
 
   /* 4. Notes made while signed out move into an account only when asked */
   const C = await device();
