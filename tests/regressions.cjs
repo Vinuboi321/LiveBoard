@@ -449,6 +449,37 @@ const BASE = process.env.BASE || "http://localhost:4173";
     await c2.close();
   }
 
+  // touch screens (iPad): hover styles are off, and what a mouse gets by resting has another way in
+  {
+    const { devices } = require("playwright");
+    const c3 = await b.newContext({ ...devices["iPad Pro 11 landscape"], serviceWorkers: "block" });
+    const t = await c3.newPage();
+    t.on("pageerror", e => errs.push("pageerror: " + e.message));
+    await t.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    await t.route("**/api/marker", r => r.fulfill({ json: { ai: false } }));
+    await t.goto(BASE); await t.waitForSelector(".fcard"); await t.waitForTimeout(2400);
+    const look = await t.evaluate(() => {
+      const hoverRules = [...document.styleSheets].flatMap(sh => { try { return [...sh.cssRules]; } catch { return []; } }).filter(r => r.selectorText && r.selectorText.includes(":hover")).length;
+      return { hoverRules, touchHint: getComputedStyle(document.querySelector(".spinhint .tch")).display, mouseHint: getComputedStyle(document.querySelector(".spinhint .hov")).display };
+    });
+    ok(look.hoverRules === 0, `no :hover style sits outside a hover media query, so taps can't leave things stuck (${look.hoverRules} found)`);
+    ok(look.touchHint !== "none" && look.mouseHint === "none", "the dial's hint is worded for touch");
+    const cdp = await c3.newCDPSession(t);
+    await t.evaluate(() => document.querySelector(".fcard").scrollIntoView({ block: "center" })); await t.waitForTimeout(300);
+    const fb = await (await t.$(".fcard")).boundingBox(), pt = { x: Math.round(fb.x + fb.width / 2), y: Math.round(fb.y + fb.height / 2) };
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [pt] });
+    await t.waitForTimeout(650);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await t.waitForTimeout(400);
+    ok(!!(await t.$("#fpeek")) && !!(await t.$("#dial")), "press and hold on a marker card shows its peek without opening it");
+    await t.touchscreen.tap(40, 300); await t.waitForTimeout(400);
+    ok(!(await t.$("#fpeek")), "tapping elsewhere puts the peek away");
+    await t.touchscreen.tap(pt.x, pt.y);
+    await t.waitForSelector(".mws", { timeout: 6000 }).then(() => ok(true, "a plain tap still opens the marker"), () => ok(false, "a plain tap still opens the marker"));
+    ok(await t.evaluate(() => [...document.querySelectorAll("kbd")].every(k => getComputedStyle(k).display === "none")), "keyboard hints are hidden on touch");
+    await c3.close();
+  }
+
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL REGRESSIONS PASS");
   process.exit(errs.length ? 1 : 0);

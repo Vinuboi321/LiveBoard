@@ -89,9 +89,6 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       <div class="ptop">
         <div class="pleft">
           <button class="stream" id="backBtn" aria-label="Return to dial">
-            <span class="streamflow" aria-hidden="true">
-              <svg viewBox="0 0 400 22" preserveAspectRatio="none"><defs><linearGradient id="streamG" x1="0" x2="1"><stop offset="0"/><stop offset=".5"/><stop offset="1"/></linearGradient></defs>
-                <path class="w1" d="M-40 9 q10 -7 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0"/><path class="w2" d="M-60 16 q15 -6 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0"/></svg></span>
             <span class="streamtxt" aria-hidden="true"><i style="--i:0">R</i><i style="--i:1">e</i><i style="--i:2">t</i><i style="--i:3">u</i><i style="--i:4">r</i><i style="--i:5">n</i><i style="--i:6">&nbsp;</i><i style="--i:7">t</i><i style="--i:8">o</i><i style="--i:9">&nbsp;</i><i style="--i:10">d</i><i style="--i:11">i</i><i style="--i:12">a</i><i style="--i:13">l</i></span>
           </button>
           <div class="prow2">
@@ -815,9 +812,13 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   railEl.addEventListener("pointerleave", () => showCandidate(null));
   // If the rail is rebuilt between press and release, the click lands on the rail itself; remember what was pressed.
   let pressed: { c: Candidate; at: number } | null = null;
+  // With a mouse, resting on a suggestion dot shows the passage it means. Touch has no resting, so the first tap shows it
+  // and a second tap marks it.
+  let byTouch = false, armed = "";
   railEl.addEventListener("pointerdown", e => {
     const g = (e.target as HTMLElement).closest<HTMLElement>(".rdot.ghost");
     pressed = g && candidates[Number(g.dataset.sug)] ? { c: candidates[Number(g.dataset.sug)], at: Date.now() } : null;
+    byTouch = e.pointerType === "touch";
   });
   $("#rail", stage)!.addEventListener("click", e => {
     const b = (e.target as HTMLElement).closest<HTMLElement>(".rdot");
@@ -826,6 +827,8 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     if (!b && !lost) return;
     if (lost || b!.classList.contains("ghost")) {
       const c = lost ?? candidates[Number(b!.dataset.sug)];
+      if (byTouch && c && armed !== c.text) { armed = c.text; showCandidate(c); toast("Tap the dot again to mark this passage", 2200); return; }
+      armed = "";
       showCandidate(null);
       if (!c || !ed || testing) return;
       // the text may have shifted since it was found; only mark it if it still reads the same

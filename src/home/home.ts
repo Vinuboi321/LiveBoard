@@ -110,9 +110,8 @@ async function renderMorning() {
       <div class="lbpop exampop" data-pop="exam:${x.courseId}" ${pop === "exam:" + x.courseId ? "" : "hidden"}><h3>${esc(x.name)} exam · ${inDays(x.days)}</h3>
         ${x.markers.length ? `<div class="ebig">${ring(x.pct, x.color, "big")}<span class="epct"><b>${x.pct}%</b>ready</span>
           <div class="ebars">${(["Unsure", "Getting it", "Mastered"] as const).map((l, i) => `<div><span>${l}</span><i><u style="width:${Math.round(100 * x.counts[i] / x.markers.length)}%;background:${i === 2 ? "var(--good)" : i ? x.color : "var(--line)"}"></u></i><b>${x.counts[i]}</b></div>`).join("")}</div></div>
-          <button class="recallbtn cram" data-cram="${x.courseId}">Cram for this exam <span class="cnt">${left || x.markers.length}</span></button>
-          <div class="note">${left ? "Opens a cram sitting: your weak spots, plus extra questions written from your notes." : "Everything here is mastered. One more pass won't hurt."}</div>`
-        : `<button class="recallbtn cram" data-cram="${x.courseId}">Cram from your notes</button><div class="note">No markers in ${esc(x.name)} yet. Cram can still write practice questions from the notes themselves.</div>`}</div></div>`;
+          <button class="recallbtn cram" data-cram="${x.courseId}" data-tip="${left ? "Opens a cram sitting: your weak spots, plus extra questions written from your notes." : "Everything here is mastered. One more pass won't hurt."}">Cram for this exam <span class="cnt">${left || x.markers.length}</span></button>`
+        : `<button class="recallbtn cram" data-cram="${x.courseId}" data-tip="No markers in ${esc(x.name)} yet. Cram can still write practice questions from the notes themselves.">Cram from your notes</button>`}</div></div>`;
     }).join("")}
     <div class="lbwrap" id="lbWrap">${c?.classId && currentUser()
       ? `<button class="chip lbchip" id="lbBtn" data-popbtn="lb" aria-expanded="${pop === "lb"}" aria-controls="lbPop"><span class="lbico" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="6" cy="5.5" r="2.4" fill="currentColor"/><path d="M1.6 13c.3-2.5 2-3.9 4.4-3.9s4.1 1.4 4.4 3.9z" fill="currentColor"/><circle cx="11.6" cy="6.2" r="1.8" fill="currentColor" opacity=".6"/><path d="M11 9.4c2 .1 3.2 1.3 3.5 3.6h-2.6" fill="currentColor" opacity=".6"/></svg></span><b id="lbRank">#–</b><small>in ${esc(c.name)}</small></button><div class="lbpop" id="lbPop" data-pop="lb" ${pop === "lb" ? "" : "hidden"}><h3>${esc(c.name)} · this week</h3><div id="lbRows">Loading…</div></div>`
@@ -177,7 +176,27 @@ function renderFollow() {
     b.onclick = () => openMarker(b.dataset.m!, true);
     // resting on a card shows a peek of what's inside the marker; the peek is clickable too
     b.addEventListener("pointerenter", e => { if (e.pointerType !== "touch") showPeek(b, id => openMarker(id, true)); });
-    b.addEventListener("pointerleave", () => hidePeek());
+    b.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") hidePeek(); });
+    // touch has no resting: press and hold shows the same peek (a plain tap still opens the marker). It stays until you
+    // tap it (opens) or tap anywhere else (puts it away).
+    let hold = 0, held = false, hx = 0, hy = 0;
+    const drop = () => { clearTimeout(hold); hold = 0; };
+    b.addEventListener("pointerdown", e => {
+      if (e.pointerType !== "touch") return;
+      held = false; hx = e.clientX; hy = e.clientY;
+      hold = window.setTimeout(() => {
+        held = true;
+        navigator.vibrate?.(8);
+        showPeek(b, id => openMarker(id, true), 0);
+        const away = (ev: PointerEvent) => { if ((ev.target as Element).closest("#fpeek")) return; document.removeEventListener("pointerdown", away, true); hidePeek(true); };
+        setTimeout(() => document.addEventListener("pointerdown", away, true), 0);
+      }, 430);
+    });
+    b.addEventListener("pointermove", e => { if (hold && Math.hypot(e.clientX - hx, e.clientY - hy) > 8) drop(); });
+    b.addEventListener("pointerup", drop);
+    b.addEventListener("pointercancel", drop);
+    b.addEventListener("contextmenu", e => { if (held) e.preventDefault(); });
+    b.addEventListener("click", e => { if (held) { held = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     b.addEventListener("focus", () => { if (b.matches(":focus-visible")) showPeek(b, id => openMarker(id, true), 0); });
     b.addEventListener("blur", () => hidePeek());
   });
@@ -305,7 +324,7 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
           <button class="hbtn" data-act="import" title="Import lecture" aria-label="Import lecture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M7 8l5-5 5 5"/><path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5"/></svg><span>Import</span></button>
           <button class="hbtn" data-act="blank" title="Blank page" aria-label="Blank page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M12 12v6M9 15h6"/></svg><span>Blank page</span></button></div></div></div>
     <div id="infoSlot"></div>
-    <div class="spinrow"><button class="spinbtn" id="spinPrev" aria-label="Spin toward newer notes">←</button><span class="spinhint">Drag or scroll to move through time · select a folder to peek inside</span><button class="spinbtn" id="spinNext" aria-label="Spin toward older notes">→</button></div>
+    <div class="spinrow"><button class="spinbtn" id="spinPrev" aria-label="Spin toward newer notes">←</button><span class="spinhint"><span class="hov">Drag or scroll to move through time · select a folder to peek inside</span><span class="tch">Drag the dial to move through time · tap a folder to bring it up and open it</span></span><button class="spinbtn" id="spinNext" aria-label="Spin toward older notes">→</button></div>
     <section class="follow" id="follow"></section></div>`;
   $("#folders")!.innerHTML = items.map(itemHTML).join("");
   $("#hub")!.querySelectorAll<HTMLButtonElement>(".hbtn").forEach(b => b.onclick = () => (b.dataset.act === "blank" ? h.newBlank() : h.importFile()));

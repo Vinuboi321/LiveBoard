@@ -137,10 +137,18 @@ function paint(el: HTMLElement, all: Marker[], W: number, open: (id: string) => 
     tip.style.top = p.y + "px";
     tip.classList.toggle("below", p.y < 70);
   };
-  svg.addEventListener("pointerover", e => focus((e.target as Element).closest<SVGGElement>(".star")));
-  svg.addEventListener("pointerleave", () => focus(null));
+  // With a mouse, resting on a star says what it is and a click opens it. Touch has no resting, so the first tap says what
+  // it is and a second tap on the same star opens it; tapping empty sky puts the label away.
+  let byTouch = false, armed = "";
+  svg.addEventListener("pointerdown", e => { byTouch = e.pointerType === "touch"; });
+  svg.addEventListener("pointerover", e => { if (e.pointerType !== "touch") focus((e.target as Element).closest<SVGGElement>(".star")); });
+  svg.addEventListener("pointerleave", e => { if (e.pointerType !== "touch") focus(null); });
   svg.addEventListener("click", e => {
     const g = (e.target as Element).closest<SVGGElement>(".star");
-    if (g) open(g.dataset.m!);
+    if (!byTouch) { if (g) open(g.dataset.m!); return; }
+    if (g && armed === g.dataset.m) { armed = ""; open(g.dataset.m!); return; }
+    armed = g?.dataset.m || "";
+    focus(g);
+    if (g) tip.insertAdjacentHTML("beforeend", `<small class="tapagain">Tap again to open</small>`);
   });
 }
