@@ -8,6 +8,7 @@ import { compareAnswer, fingerprint, forecast, gradeMarker, isDue, recallable, r
 import { renderSky } from "./sky";
 import { closeMap, openMap } from "./map";
 import { pulse, recolor, startBezel, stopBezel } from "./bezel";
+import { openCram } from "./cram";
 import { onTheme } from "../theme";
 import { closeShelf, openShelf } from "./shelf";
 
@@ -35,10 +36,6 @@ interface Item { b: Band; label: string; ns: Note[]; w: number; loose?: boolean;
 interface Recall { queue: string[]; i: number; revealed: boolean; got: number; done: boolean; k: number; typed: string; missed: string[]; cram: string | null; ai: string | null; checking: boolean; flipped?: boolean }
 
 let items: Item[] = [];
-/* The knob at the top of the dial. It rests at the top; grabbed, it travels round the rim to whatever you point it at, and on
-   letting go the dial brings that note or folder up to the top with the knob riding on it. Arrow keys, the wheel and taps do
-   the same: the knob darts out to the chosen item and comes home with it. knob is its angle from the top in degrees. */
-let knob = 0, knobDrag: number | null = null, knobFollow = -1, knobDrawn = 0;
 let rot = 0, target = 0, sel = -1, hoverF = -1, hoverNote: string | null = null, dragging = false, lastDrawn: number | null = null, raf = 0;
 let G: { c: number; rF: number; hub: number; push: number; els: HTMLElement[]; turn: HTMLElement[] } = { c: 0, rF: 0, hub: 0, push: 0, els: [], turn: [] };
 let R: Recall | null = null;
@@ -113,9 +110,9 @@ async function renderMorning() {
       <div class="lbpop exampop" data-pop="exam:${x.courseId}" ${pop === "exam:" + x.courseId ? "" : "hidden"}><h3>${esc(x.name)} exam · ${inDays(x.days)}</h3>
         ${x.markers.length ? `<div class="ebig">${ring(x.pct, x.color, "big")}<span class="epct"><b>${x.pct}%</b>ready</span>
           <div class="ebars">${(["Unsure", "Getting it", "Mastered"] as const).map((l, i) => `<div><span>${l}</span><i><u style="width:${Math.round(100 * x.counts[i] / x.markers.length)}%;background:${i === 2 ? "var(--good)" : i ? x.color : "var(--line)"}"></u></i><b>${x.counts[i]}</b></div>`).join("")}</div></div>
-          <button class="recallbtn cram" data-cram="${x.courseId}">${left ? `Cram <span class="cnt">${Math.min(left, 30)}</span>` : `Quiz all <span class="cnt">${Math.min(x.markers.length, 30)}</span>`}</button>
-          <div class="note">${left ? "Cram quizzes everything in this course you haven't mastered yet, due or not." : "Everything here is mastered. One more pass won't hurt."}</div>`
-        : `<div class="note">Place markers in your ${esc(x.name)} notes and your readiness shows up here.</div>`}</div></div>`;
+          <button class="recallbtn cram" data-cram="${x.courseId}">Cram for this exam <span class="cnt">${left || x.markers.length}</span></button>
+          <div class="note">${left ? "Opens a cram sitting: your weak spots, plus extra questions written from your notes." : "Everything here is mastered. One more pass won't hurt."}</div>`
+        : `<button class="recallbtn cram" data-cram="${x.courseId}">Cram from your notes</button><div class="note">No markers in ${esc(x.name)} yet. Cram can still write practice questions from the notes themselves.</div>`}</div></div>`;
     }).join("")}
     <div class="lbwrap" id="lbWrap">${c?.classId && currentUser()
       ? `<button class="chip lbchip" id="lbBtn" data-popbtn="lb" aria-expanded="${pop === "lb"}" aria-controls="lbPop"><b id="lbRank">#–</b><small>in ${esc(c.name)}</small></button><div class="lbpop" id="lbPop" data-pop="lb" ${pop === "lb" ? "" : "hidden"}><h3>${esc(c.name)} · this week</h3><div id="lbRows">Loading…</div></div>`
@@ -123,11 +120,10 @@ async function renderMorning() {
   el.querySelectorAll<HTMLButtonElement>(".scope button").forEach(b => b.onclick = async e => { e.stopPropagation(); pop = null; await putLocalMeta({ scope: b.dataset.s as "due" }); renderMorning(); });
   $("#recallBtn")!.onclick = () => startRecall();
   el.querySelectorAll<HTMLButtonElement>("[data-popbtn]").forEach(b => b.onclick = e => { e.stopPropagation(); setPop(b.dataset.popbtn!); });
+  // cramming is a longer sitting than daily recall, so it opens its own screen (cram.ts)
   el.querySelectorAll<HTMLButtonElement>("[data-cram]").forEach(b => b.onclick = () => {
-    const x = upcomingExams().find(e => e.courseId === b.dataset.cram);
-    if (!x) return;
-    const weak = x.markers.filter(m => m.mastery < 2);
-    startRecall((weak.length ? weak : x.markers).sort((a, z) => a.mastery - z.mastery || a.due - z.due).slice(0, 30), x.name);
+    closePop();
+    openCram({ courseId: b.dataset.cram!, openNote: (noteId, markerId) => { if (markerId) setPendingOpen(markerId); handlers?.openNote(noteId); }, onClose: () => { if (alive && $("#dial") && handlers) renderHome($("#stage")!, handlers, true); } });
   });
   const join = $("#lbJoin");
   if (join) join.onclick = () => handlers?.openSettings("classes");
@@ -302,7 +298,7 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
   const prevRot = rot, prevTarget = target;
   stage.innerHTML = `<div class="dialwrap"><div class="morning" id="morning"></div>
     <div id="dial" tabindex="0" role="group" aria-roledescription="dial" aria-label="Your notes, arranged by when you last opened them. Use the arrow keys to spin and Enter to open.">
-      <div class="dialgrid" aria-hidden="true"></div><div class="dialglow" aria-hidden="true"></div><div class="ringline" id="ringline"></div><div id="folders"></div><div class="pointer" id="pointer"></div>
+      <div class="dialgrid" aria-hidden="true"></div><div class="dialglow" aria-hidden="true"></div><div class="ringline" id="ringline"></div><div id="folders"></div>
       <div class="hub" id="hub"><div class="hubring" id="hubring" aria-hidden="true"></div><div class="hubticks" id="hubticks" aria-hidden="true"></div><svg class="hubprog" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="48" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
         <div class="info" id="info" aria-live="polite"></div>
         <div class="hubacts">
@@ -485,10 +481,7 @@ function draw() {
     updateInfo();
     paintRing(); // the lit stretch follows the pointer
     if (!first) pulse();
-    if (!first && !reducedMotion()) { // a small detent as each note passes the pointer
-      $("#pointer")?.animate([{ translate: "0 0" }, { translate: "0 4px" }, { translate: "0 0" }], { duration: 170, easing: "ease-out" });
-      if (dragging) navigator.vibrate?.(4);
-    }
+    if (!first && dragging && !reducedMotion()) navigator.vibrate?.(4); // a small detent as each note passes the top
   }
   paint();
 }
@@ -513,7 +506,6 @@ function loop() {
   if (!alive || !$("#dial")) return;
   if (!dragging) { const d = target - rot; rot = Math.abs(d) < 0.03 ? target : rot + d * (reducedMotion() ? 1 : 0.14); }
   if (rot !== lastDrawn) { draw(); lastDrawn = rot; }
-  moveKnob();
   raf = requestAnimationFrame(loop);
 }
 const snapFrom = (r: number) => {
@@ -522,16 +514,8 @@ const snapFrom = (r: number) => {
   items.forEach((f, k) => { const d = Math.abs(wrapDeg(f.ang + r)); if (d < bd) { bd = d; bk = k; } });
   return r - wrapDeg(items[bk].ang + r);
 };
-const goTo = (k: number) => { if (!items.length) return; k = ((k % items.length) + items.length) % items.length; target = rot - wrapDeg(items[k].ang + rot); knobFollow = reducedMotion() ? -1 : k; };
-const nearestTo = (deg: number) => { let bk = 0, bd = 999; items.forEach((f, k) => { const d = Math.abs(wrapDeg(f.ang + rot - deg)); if (d < bd) { bd = d; bk = k; } }); return bk; };
-function moveKnob() {
-  const f = knobFollow >= 0 ? items[knobFollow] : null;
-  const want = knobDrag !== null ? knobDrag : f ? wrapDeg(f.ang + rot) : 0;
-  const gap = wrapDeg(want - knob);
-  knob = Math.abs(gap) < 0.05 ? want : knob + gap * (knobDrag !== null ? 0.55 : 0.3);
-  if (knobDrag === null && f && rot === target && knob === want) knobFollow = -1; // home again
-  if (knob !== knobDrawn) { $("#pointer")?.style.setProperty("--k", knob.toFixed(2) + "deg"); knobDrawn = knob; }
-}
+const goTo = (k: number) => { if (!items.length) return; k = ((k % items.length) + items.length) % items.length; target = rot - wrapDeg(items[k].ang + rot); };
+
 
 /** Dark text on light course colors (yellow, mint), white on dark ones, so labels stay readable. */
 function inkOn(hex: string) {
@@ -632,7 +616,7 @@ function bindDial() {
   const ang = (e: PointerEvent) => { const r = d.getBoundingClientRect(); return Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180 / Math.PI; };
   d.addEventListener("pointerdown", e => {
     if (diving || e.button > 0 || (e.target as Element).closest(".hub")) return;
-    dragging = true; moved = 0; v = 0; last = ang(e); knobFollow = -1;
+    dragging = true; moved = 0; v = 0; last = ang(e);
     downEl = (e.target as Element).closest<HTMLElement>(".seeall,.file,.folder");
     pid = e.pointerId; d.setPointerCapture(pid); d.classList.add("dragging");
   });
@@ -654,30 +638,6 @@ function bindDial() {
   };
   d.addEventListener("pointerup", up);
   d.addEventListener("pointercancel", up);
-  // the knob: drag it round the rim to point at something; let go and the dial brings it up
-  const kn = $("#pointer")!;
-  let kpid: number | null = null, kmoved = false;
-  kn.addEventListener("pointerdown", e => {
-    e.stopPropagation();
-    if (diving || R || e.button > 0) return;
-    kpid = e.pointerId; kn.setPointerCapture(kpid); kmoved = false; knobFollow = -1; knobDrag = ang(e); d.classList.add("knobbing");
-  });
-  kn.addEventListener("pointermove", e => {
-    if (e.pointerId !== kpid || knobDrag === null) return;
-    knobDrag = ang(e);
-    if (Math.abs(knobDrag) > 4) kmoved = true;
-    const k = nearestTo(knobDrag);
-    if (kmoved && k !== hoverF) { hoverF = k; hoverNote = null; paint(); updateInfo(); navigator.vibrate?.(4); }
-  });
-  const kup = (e: PointerEvent) => {
-    if (e.pointerId !== kpid || knobDrag === null) return;
-    const k = nearestTo(knobDrag);
-    kpid = null; knobDrag = null; d.classList.remove("knobbing");
-    if (hoverF >= 0) { hoverF = -1; hoverNote = null; paint(); updateInfo(); }
-    if (kmoved) goTo(k);
-  };
-  kn.addEventListener("pointerup", kup);
-  kn.addEventListener("pointercancel", kup);
   const folders = $("#folders")!;
   folders.addEventListener("pointerover", e => {
     if (dragging || diving || e.pointerType === "touch" || R) return;

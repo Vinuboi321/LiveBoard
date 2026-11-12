@@ -418,22 +418,35 @@ const BASE = process.env.BASE || "http://localhost:4173";
     await p.keyboard.press("Escape");
   }
 
-  // the knob on the dial's rim can be dragged to an item; letting go brings that item to the top and the knob home
+  // cram without AI: extra questions are built on the device from the notes, and no request leaves for the model
   {
-    await p.setViewportSize({ width: 1280, height: 800 });
-    await p.goto(BASE); await p.waitForSelector("#folders .folder"); await p.waitForTimeout(2600);
-    const want = await p.evaluate(() => { const all = [...document.querySelectorAll("#folders .folder")]; return all[Math.floor(all.length / 2)].dataset.f; }); // the item farthest round from the top
-    const fb = await (await p.$(`#folders .folder[data-f="${want}"]`)).boundingBox();
-    const kb = await (await p.$("#pointer")).boundingBox();
-    await p.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await p.mouse.down();
-    await p.mouse.move(fb.x + fb.width / 2 + 60, fb.y + fb.height / 2, { steps: 12 });
-    await p.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2, { steps: 6 }); await p.waitForTimeout(400);
-    const out = await p.evaluate(() => parseFloat(document.querySelector("#pointer").style.getPropertyValue("--k")) || 0);
-    ok(Math.abs(out) > 60, "dragging the dial's knob carries it round the rim");
-    await p.mouse.up(); await p.waitForTimeout(2200);
-    const after = await p.evaluate(w => ({ k: parseFloat(document.querySelector("#pointer").style.getPropertyValue("--k")) || 0, open: document.querySelector(`#folders .folder[data-f="${w}"]`).classList.contains("open") }), want);
-    ok(after.open, "letting go brings the pointed-at folder under the pointer");
-    ok(Math.abs(after.k) < 1, "and the knob returns to the top");
+    const c2 = await b.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: "block" });
+    const q = await c2.newPage();
+    q.on("pageerror", e => errs.push("pageerror: " + e.message));
+    let posts = 0;
+    await q.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
+    await q.route("**/api/marker", r => { if (r.request().method() === "GET") return r.fulfill({ json: { ai: false } }); posts++; return r.fulfill({ status: 501, json: { error: "off" } }); });
+    await q.goto(BASE); await q.waitForSelector(".hbtn[data-act='blank']"); await q.waitForTimeout(2300);
+    await q.click(".hbtn[data-act='blank']"); await q.waitForSelector("#editor .ProseMirror");
+    await q.fill("#ptitle", "Membranes");
+    await q.click("#editor .ProseMirror");
+    await q.keyboard.type("Osmosis moves water across a membrane toward the side with more dissolved solute. Diffusion spreads molecules from crowded regions into emptier regions without any energy. Active transport pushes molecules against their gradient and therefore spends energy from ATP. Aquaporins are channel proteins that let water cross the membrane quickly.");
+    await q.waitForTimeout(900);
+    await q.click("#settingsBtn"); await q.waitForSelector(".crow .exam input");
+    const soon = new Date(Date.now() + 4 * 864e5), ymd = `${soon.getFullYear()}-${String(soon.getMonth() + 1).padStart(2, "0")}-${String(soon.getDate()).padStart(2, "0")}`;
+    await q.fill(".crow .exam input", ymd); await q.dispatchEvent(".crow .exam input", "change");
+    await q.keyboard.press("Escape");
+    await q.click("#backBtn"); await q.waitForSelector(".examchip");
+    await q.click(".examchip"); await q.click(".exampop:not([hidden]) [data-cram]");
+    await q.waitForSelector("#cram #crGen"); await q.waitForTimeout(300);
+    await q.click("#crGen"); await q.waitForSelector(".crgq");
+    const made = await q.$$eval(".crgqt", els => els.map(e => e.textContent));
+    ok(made.length >= 2 && made.every(t => t.includes("_____")) && posts === 0, `with AI off, cram builds fill-in-the-blank questions from the notes on the device (${made.length}, ${posts} model requests)`);
+    await q.click("#crStart"); await q.waitForSelector(".crcard");
+    ok(!(await q.$("#crCheck")), "and never offers an AI check there");
+    await q.keyboard.press("Escape"); await q.waitForTimeout(200); await q.keyboard.press("Escape");
+    await q.waitForSelector("#cram", { state: "detached" });
+    await c2.close();
   }
 
   await b.close();

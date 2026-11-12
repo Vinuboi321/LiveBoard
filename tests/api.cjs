@@ -11,6 +11,13 @@ const BASE_ENV = { ANTHROPIC_API_KEY: "sk-test", SUPABASE_URL: "https://db.test"
 const GOOD_BODY = { intent: "explain this", passage: "Glycolysis splits glucose.", before: "", after: "", note: "Glycolysis splits glucose.", title: "Bio", course: "BIO", thread: [] };
 const MODEL_OK = { content: [{ type: "tool_use", name: "marker_result", input: { sources:[{field:"passage",quote:"Glycolysis splits glucose."},{field:"passage",quote:"An invented claim"},{field:"url",quote:"https://evil.test"}], kind: "answer", type: "explain", markdown: "It breaks glucose into two pyruvate.", recall: { q: "What does glycolysis make?", a: "Two pyruvate." } } }] };
 
+const QUIZ_BODY = { action: "quiz", intent: "harder ones", note: "Glycolysis splits one glucose into two pyruvate in the cytoplasm, making a net 2 ATP and 2 NADH. It needs no oxygen.", title: "Glycolysis", course: "BIO" };
+const QUIZ_OK = { content: [{ type: "tool_use", name: "quiz_result", input: { questions: [
+  { kind: "short", q: "Why can glycolysis run without oxygen?", a: "It never uses oxygen as an electron acceptor.", why: "Oxygen only matters later." },
+  { kind: "choice", q: "Net ATP from glycolysis?", a: "2", choices: ["2", "4", "36", "0"], why: "4 made, 2 spent." },
+  { kind: "choice", q: "Where does it happen?", a: "Nucleus", choices: ["Cytoplasm", "Mitochondria", "Membrane"] },
+  { kind: "short", q: "", a: "no question" }, { q: 7 }, null
+] } }] };
 async function call({ env = {}, method = "POST", body = GOOD_BODY, headers = { authorization: "Bearer good" }, auth = "ok", quota = { allowed: true, used: 1 }, model = "ok" } = {}) {
   const saved = { ...process.env };
   for (const k of ["ANTHROPIC_API_KEY", "SUPABASE_URL", "SUPABASE_ANON_KEY", "VERCEL_ENV", "AI_DISABLED", "ALLOW_ANONYMOUS_AI"]) delete process.env[k];
@@ -36,6 +43,7 @@ async function call({ env = {}, method = "POST", body = GOOD_BODY, headers = { a
       if (model === "timeout") { const e = new Error("timeout"); e.name = "TimeoutError"; throw e; }
       if (model === "500") return new Response("{}", { status: 500 });
       if (model === "notool") return new Response(JSON.stringify({ content: [{ type: "text", text: "hi" }] }), { status: 200 });
+      if (JSON.parse(init.body).tool_choice.name === "quiz_result") return new Response(JSON.stringify(model === "emptyquiz" ? { content: [{ type: "tool_use", name: "quiz_result", input: { questions: [] } }] } : QUIZ_OK), { status: 200 });
       return new Response(JSON.stringify(MODEL_OK), { status: 200 });
     }
     throw new Error("unexpected fetch " + url);
@@ -87,6 +95,17 @@ async function call({ env = {}, method = "POST", body = GOOD_BODY, headers = { a
   await expect("model error is a 502", { model: "500" }, 502, 1);
   await expect("unusable model reply is a 502", { model: "notool" }, 502, 1);
   await expect("other methods are refused", { method: "DELETE" }, 405, 0);
+  // practice questions (action "quiz") go through the same gates
+  await expect("a signed-in quiz request reaches the model once", { body: QUIZ_BODY }, 200, 1);
+  await expect("quiz without a token refuses", { body: QUIZ_BODY, headers: {} }, 401, 0);
+  await expect("quiz with the quota check down refuses", { body: QUIZ_BODY, quota: "down" }, 503, 0);
+  await expect("quiz over the daily limit refuses", { body: QUIZ_BODY, quota: { allowed: false, reason: "daily" } }, 429, 0);
+  await expect("quiz with the kill switch on refuses", { body: QUIZ_BODY, env: { AI_DISABLED: "true" } }, 503, 0);
+  await expect("quiz with almost no notes is a 400", { body: { ...QUIZ_BODY, note: "too short" } }, 400, 0);
+  await expect("quiz with no usable questions back is a 502", { body: QUIZ_BODY, model: "emptyquiz" }, 502, 1);
+  const quiz = (await call({ body: QUIZ_BODY })).json.questions || [];
+  if (quiz.length === 3 && quiz[1].kind === "choice" && quiz[1].choices.includes(quiz[1].a) && quiz[2].kind === "short" && !quiz[2].choices) console.log("ok   quiz replies keep only well-formed questions, and a choice question whose answer isn't an option becomes a short one");
+  else errs.push("quiz shape: " + JSON.stringify(quiz));
   const health = await call({ method: "GET", env: { SUPABASE_URL: undefined } });
   if (health.status === 200 && health.json.ai === false) console.log("ok   health check reports AI off when sign-in checks are missing");
   else errs.push("health check should report ai:false without Supabase config: " + JSON.stringify(health.json));

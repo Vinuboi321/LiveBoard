@@ -126,6 +126,15 @@ export interface MarkerRequest {
 }
 
 export async function askMarker(body: MarkerRequest): Promise<AIResult> {
+  return (await post({ ...body, thread: body.thread.map(m => ({ role: m.role, text: m.text })) })) as AIResult;
+}
+export interface GenQuestion { kind: "short" | "choice"; q: string; a: string; choices?: string[]; why?: string }
+/** Practice questions written from the student's own notes (cramming). `ask` is what they typed, if anything. */
+export async function askQuiz(req: { material: string; course: string; topics: string; ask: string }): Promise<GenQuestion[]> {
+  const j = (await post({ action: "quiz", intent: req.ask.slice(0, 600), note: req.material.slice(0, 9000), title: req.topics.slice(0, 140), course: req.course.slice(0, 60) })) as { questions?: GenQuestion[] };
+  return Array.isArray(j.questions) ? j.questions : [];
+}
+async function post(body: Record<string, unknown>): Promise<unknown> {
   if (syncConfigured() && !currentUser()) throw new Error("Sign in (Settings) to use AI markers. Math, formatting, links and reminders work without it.");
   const token = authToken();
   let r: Response;
@@ -134,7 +143,7 @@ export async function askMarker(body: MarkerRequest): Promise<AIResult> {
       method: "POST",
       signal: AbortSignal.timeout(40_000),
       headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ ...body, thread: body.thread.map(m => ({ role: m.role, text: m.text })) })
+      body: JSON.stringify(body)
     });
   } catch (e) {
     if ((e as Error)?.name === "TimeoutError") throw new Error("The AI took too long. Your question is saved in the marker; try again.");
@@ -145,5 +154,5 @@ export async function askMarker(body: MarkerRequest): Promise<AIResult> {
     if (r.status === 404) throw new Error("AI isn't set up on this server yet. See the setup guide in the README.");
     throw new Error(j.error || "The AI request failed. Try again.");
   }
-  return j as AIResult;
+  return j;
 }

@@ -15,6 +15,7 @@ const MOCK = intent => {
   return { kind: "insert", type: "explain", markdown: "In plain words: a marker turns a phrase into something you can ask about. For example, the value is computed exactly.", calc: "e^0.5 * 0.5^4 / factorial(4)", recall: { q: "What does a marker turn a phrase into?", a: "Something you can ask about." } };
 };
 
+const quizAsks = [];
 (async () => {
   const b = await chromium.launch();
   const errs = [];
@@ -29,6 +30,9 @@ const MOCK = intent => {
       if (req.method() === "GET") return route.fulfill({ json: { ai: true, model: "mock" } });
       const body = JSON.parse(req.postData() || "{}");
       await new Promise(r => setTimeout(r, 150));
+      if (body.action === "quiz") { quizAsks.push(body); return route.fulfill({ json: { questions: [
+        { kind: "choice", q: "What does glycolysis net per glucose?", a: "2 ATP", choices: ["2 ATP", "4 ATP", "36 ATP", "0 ATP"], why: "Four are made and two are spent." },
+        { kind: "short", q: "Why does glycolysis not need oxygen?", a: "It never uses oxygen as an electron acceptor.", why: "Oxygen only matters downstream." }] } }); }
       return route.fulfill({ json: MOCK(body.intent) });
     });
     await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
@@ -377,9 +381,48 @@ const MOCK = intent => {
     check(/5d/.test(await p.textContent(".examchip")), "a course with an exam date shows a countdown chip");
     await p.click(".examchip");
     await p.click(".exampop:not([hidden]) [data-cram]");
-    await p.waitForSelector("#reveal");
-    check(/Cram 1 of/i.test(await p.textContent("#info .pill")), "the exam chip starts a cram session for that course");
+    await p.waitForSelector("#cram #crStart");
+    check(/ready/.test(await p.textContent(".crready")) && (await p.$$(".crtopic")).length > 0, "the exam chip opens the cram screen for that course, with its topics");
+    const before = await p.evaluate(() => document.querySelector("#crStart .cnt").textContent);
+    // extra questions: what the student types is sent with their notes, and what comes back joins the sitting
+    await p.fill("#crAsk", "harder ones on ATP");
+    await p.click("#crGen");
+    await p.waitForSelector(".crgq");
+    const sent = quizAsks[quizAsks.length - 1] || {};
+    check((await p.$$(".crgq")).length === 2 && sent.intent === "harder ones on ATP" && typeof sent.note === "string" && sent.note.length > 40, "Generate questions sends the chosen notes and what was typed, and lists what comes back");
+    check(Number(await p.textContent("#crStart .cnt")) === Number(before) + 2, "generated questions are added to the sitting");
     await p.screenshot({ path: `${OUT}/10-cram.png` });
+    await p.click("#crStart");
+    await p.waitForSelector(".crcard");
+    const mastery0 = await p.evaluate(() => new Promise(res => { const r = indexedDB.open("liveboard"); r.onsuccess = () => { const q = r.result.transaction("markers").objectStore("markers").getAll(); q.onsuccess = () => res(q.result.map(m => [m.id, m.mastery, m.due])); }; }));
+    let sawChoice = false, sawRepeat = false, missed = false;
+    for (let i = 0; i < 30 && !(await p.$(".crdone")); i++) {
+      if (await p.$(".crtag")) sawRepeat = true;
+      if (await p.$(".cropt")) {
+        sawChoice = true;
+        await p.keyboard.press("b"); // a wrong option the first time (the right one is A)
+        await p.waitForSelector(".crverdict");
+        if (!sawRepeat) check(!!(await p.$(".cropt.wrong")) && !!(await p.$(".cropt.right")), "a multiple-choice answer marks itself and shows the right one");
+        await p.keyboard.press("Enter");
+      } else {
+        await p.keyboard.type("my answer");
+        await p.keyboard.press("Enter");
+        await p.waitForSelector(".crgrade");
+        if (!missed) { missed = true; await p.keyboard.press("1"); } // Again: graded, and asked again
+        else await p.keyboard.press("3");
+      }
+      await p.waitForTimeout(160);
+    }
+    await p.waitForSelector(".crdone");
+    check(sawChoice && sawRepeat, "questions that weren't known come round again before the sitting ends");
+    check(/of \d+/.test(await p.textContent(".crbign")) && (await p.$$(".crtopicbars div")).length > 0 && !!(await p.$("#crRedo")), "the end screen shows the first-try score by topic and offers another go at the missed ones");
+    const mastery1 = await p.evaluate(() => new Promise(res => { const r = indexedDB.open("liveboard"); r.onsuccess = () => { const q = r.result.transaction("markers").objectStore("markers").getAll(); q.onsuccess = () => res(q.result.map(m => [m.id, m.mastery, m.due])); }; }));
+    const changed = mastery1.filter(([id, m, due]) => { const o = mastery0.find(x => x[0] === id); return o && (o[1] !== m || o[2] !== due); }).length;
+    check(changed >= 1, "marker questions answered Got it or Again are graded and rescheduled (" + changed + " changed)");
+    await p.screenshot({ path: `${OUT}/10b-cram-done.png` });
+    await p.keyboard.press("Escape");
+    await p.waitForSelector("#cram", { state: "detached" });
+    check(!!(await p.$("#dial")), "closing cram returns to the dial");
     await ctx.close();
   }
 

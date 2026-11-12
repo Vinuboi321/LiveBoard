@@ -42,6 +42,49 @@ Rules:
 - Pick "type" for what this marker now is: explain, question, math, visual, note (drafted or reformatted writing), link, reminder.
 - This is a study tool. If the student asks you to write graded work for them (an essay to submit, homework answers to hand in), explain the idea and help them work it out instead of producing the finished submission.`;
 
+/* Practice questions for cramming: a second, smaller job for the same endpoint (action "quiz"). It goes through exactly
+   the same sign-in and quota checks as a marker, and counts as one AI request. */
+const QUIZ_SYSTEM = `You write practice questions inside LiveBoard, a study notes app. A student is cramming for an exam and gives you their own notes for one course, sometimes with a line about what they want.
+
+Rules:
+- Write 6 questions (fewer only if the notes are too thin) that test understanding of the notes: why something happens, how two ideas differ, what would change if, applying an idea to a small case. Avoid trivia about wording.
+- Ground every question and answer in the notes. Standard course knowledge may fill small gaps, but never invent course-specific facts (dates, policies, what the professor said).
+- Mix the formats: mostly "short" (answered in one or two sentences from memory) with two or three "choice" questions. A "choice" question has exactly 4 options, one clearly correct, the others plausible mistakes a student would really make; "a" must be the exact text of the correct option.
+- Keep each question under 220 characters and each answer under 320. "why" is one sentence saying why the answer is right; for a "choice" question it should also say what the tempting wrong option gets wrong.
+- If the student says what they want (a topic, a difficulty, a style), follow it as long as it stays within their notes.
+- Do not ask for numeric results you would have to compute; ask how to set the calculation up instead.
+- Plain text only, with maths as Unicode (x², Σ, √), not LaTeX or Markdown.`;
+const QUIZ_TOOL = {
+  name: "quiz_result",
+  description: "Return the practice questions.",
+  input_schema: {
+    type: "object",
+    properties: {
+      questions: { type: "array", maxItems: 8, items: { type: "object", properties: {
+        kind: { type: "string", enum: ["short", "choice"] },
+        q: { type: "string" }, a: { type: "string" },
+        choices: { type: "array", maxItems: 4, items: { type: "string" } },
+        why: { type: "string" }
+      }, required: ["kind", "q", "a"] } }
+    },
+    required: ["questions"]
+  }
+};
+interface QuizQ { kind: "short" | "choice"; q: string; a: string; choices?: string[]; why: string }
+/** Keep only well-formed questions. A multiple-choice question whose answer isn't one of its options is kept as a short one. */
+function shapeQuiz(input: unknown) {
+  const list = input && typeof input === "object" && Array.isArray((input as { questions?: unknown }).questions) ? (input as { questions: unknown[] }).questions : [];
+  return list.slice(0, 8).flatMap((v): QuizQ[] => {
+    if (!v || typeof v !== "object") return [];
+    const x = v as { kind?: unknown; q?: unknown; a?: unknown; choices?: unknown; why?: unknown };
+    if (typeof x.q !== "string" || typeof x.a !== "string" || !x.q.trim() || !x.a.trim()) return [];
+    const q = clip(x.q.trim(), 300), a = clip(x.a.trim(), 600), why = typeof x.why === "string" ? clip(x.why.trim(), 400) : "";
+    const choices = Array.isArray(x.choices) ? [...new Set(x.choices.filter((c): c is string => typeof c === "string" && !!c.trim()).map(c => clip(c.trim(), 200)))].slice(0, 4) : [];
+    if (x.kind === "choice" && choices.length >= 3 && choices.includes(clip(a, 200))) return [{ kind: "choice" as const, q, a: clip(a, 200), choices, why }];
+    return [{ kind: "short" as const, q, a, why }];
+  });
+}
+
 const TOOL = {
   name: "marker_result",
   description: "Return the marker's result.",
@@ -70,7 +113,7 @@ const authConfigured = () => !!(process.env.SUPABASE_URL && process.env.SUPABASE
 class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 /* ---------- request validation ---------- */
-interface Body { action: "run" | "recall"; intent: string; passage: string; before: string; after: string; note: string; title: string; course: string; thread: { role: string; text: string }[] }
+interface Body { action: "run" | "recall" | "quiz"; intent: string; passage: string; before: string; after: string; note: string; title: string; course: string; thread: { role: string; text: string }[] }
 function parseBody(req: Req): Body {
   let raw = req.body;
   const len = Number(header(req, "content-length") || 0);
@@ -88,7 +131,7 @@ function parseBody(req: Req): Body {
     if (typeof v !== "string") throw new HttpError(400, `${k} must be text.`);
     return v.slice(0, max);
   };
-  const action = b.action === "recall" ? "recall" : "run";
+  const action = b.action === "recall" ? "recall" : b.action === "quiz" ? "quiz" : "run";
   const threadIn = b.thread === undefined || b.thread === null ? [] : b.thread;
   if (!Array.isArray(threadIn) || threadIn.length > 40) throw new HttpError(400, "thread must be a short list.");
   const thread = threadIn.slice(-6).map(t => {
@@ -99,6 +142,7 @@ function parseBody(req: Req): Body {
   });
   const body: Body = { action, intent: str("intent", 600, action === "run"), passage: str("passage", 1500), before: str("before", 1500), after: str("after", 1500), note: str("note", 9000), title: str("title", 140), course: str("course", 60), thread };
   if (action === "run" && !body.intent.trim()) throw new HttpError(400, "Type what you want the marker to do.");
+  if (action === "quiz" && body.note.trim().length < 40) throw new HttpError(400, "There isn't enough in these notes to write questions from yet.");
   return body;
 }
 
@@ -162,6 +206,27 @@ export default async function handler(req: Req, res: Res) {
 
     const b = parseBody(req);
     await authorize(req);
+
+    if (b.action === "quiz") {
+      const material = [`Course: ${clip(b.course, 60)}`, b.title ? `Topics: ${clip(b.title, 140)}` : "", `The student's notes (may be truncated): """${b.note}"""`, b.intent.trim() ? `What the student asked for: """${b.intent}"""` : ""].filter(Boolean).join("\n\n");
+      let qr: Response;
+      try {
+        qr = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: MODEL, max_tokens: 2000, system: QUIZ_SYSTEM, tools: [QUIZ_TOOL], tool_choice: { type: "tool", name: "quiz_result" }, messages: [{ role: "user", content: material }] }),
+          signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS)
+        });
+      } catch (e) {
+        const timeout = (e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError";
+        return done(timeout ? 504 : 502, { error: timeout ? "The AI took too long writing questions. Try again." : "Couldn't reach the AI. Try again." });
+      }
+      if (!qr.ok) return done(502, { error: qr.status === 429 || qr.status === 529 ? "The AI is busy right now. Try again in a moment." : "The AI request failed. Try again." });
+      const qd = await qr.json().catch(() => null) as { content?: { type: string; input?: unknown }[] } | null;
+      const questions = shapeQuiz(qd?.content?.find(c => c && c.type === "tool_use")?.input);
+      if (!questions.length) return done(502, { error: "The AI didn't return usable questions. Try again, or say what you want them to cover." });
+      return done(200, { questions });
+    }
 
     const context = [
       `Course: ${clip(b.course, 60)}`,
