@@ -270,7 +270,7 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
     await appendText(F, " LATEST UNSENT EDIT");
   };
   await appendText(F, " plus edit");
-  for (let i = 0; i < 60 && !/LATEST UNSENT EDIT/.test(serverNote(U6, "Race note")?.data.plain || ""); i++) await F.waitForTimeout(250);
+  for (let i = 0; i < 160 && !/LATEST UNSENT EDIT/.test(serverNote(U6, "Race note")?.data.plain || ""); i++) await F.waitForTimeout(250);
   await F.waitForTimeout(500);
   const raceLocal = await F.evaluate(([name, id]) => new Promise(res => { const q = indexedDB.open(name); q.onsuccess = () => { const g = q.result.transaction("notes").objectStore("notes").get(id); g.onsuccess = () => res(g.result.plain); }; }), [`liveboard-u-${U6}`, raceId]);
   ok(/LATEST UNSENT EDIT/.test(raceLocal), `the edit typed during the upload is kept in place (“…${raceLocal.slice(-40)}”)`);

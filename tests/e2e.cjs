@@ -380,6 +380,9 @@ const quizAsks = [];
     await p.waitForSelector(".examchip");
     check(/5d/.test(await p.textContent(".examchip")), "a course with an exam date shows a countdown chip");
     await p.click(".examchip");
+    { const bb = await (await p.$(".exampop:not([hidden]) [data-cram]")).boundingBox(), lb = await (await p.$(".lbchip")).evaluate(e => getComputedStyle(e).borderTopColor);
+      check(bb.height < 60 && bb.width < 300, `the Cram button in the exam pop-up is an ordinary button (${Math.round(bb.width)}×${Math.round(bb.height)})`);
+      check(!/rgba\(0, 0, 0, 0\)|transparent/.test(lb), "the Classes chip has a visible outline, so it reads as something to tap"); }
     await p.click(".exampop:not([hidden]) [data-cram]");
     await p.waitForSelector("#cram #crStart");
     check(/ready/.test(await p.textContent(".crready")) && (await p.$$(".crtopic")).length > 0, "the exam chip opens the cram screen for that course, with its topics");

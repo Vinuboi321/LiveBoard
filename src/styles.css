@@ -89,6 +89,12 @@ button:disabled { cursor: default; opacity: .6; }
 .scopepop { left: 50%; right: auto; transform: translateX(-50%); width: 190px; text-align: left; }
 .morning .chip { background: transparent; border-color: transparent; box-shadow: none; padding: 5px 9px; }
 .morning button.chip:hover, .morning button.chip[aria-expanded="true"] { background: var(--paper); border-color: var(--line); }
+/* exams and classes are things you open, so they look like buttons at rest, not like a line of text */
+.morning .mside.right button.chip { background: color-mix(in srgb, var(--paper) 70%, transparent); border-color: var(--line); padding: 6px 12px 6px 9px; box-shadow: 0 2px 8px rgba(40, 30, 90, .06); }
+.morning .mside.right button.chip:hover, .morning .mside.right button.chip[aria-expanded="true"] { background: var(--paper); border-color: color-mix(in srgb, var(--cobalt) 55%, var(--line)); }
+.lbchip .lbico { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: color-mix(in srgb, var(--cobalt) 16%, transparent); color: var(--cobalt); flex: 0 0 auto; }
+.lbchip .lbico svg { width: 13px; height: 13px; }
+.lbchip .lbgo { width: 11px; height: 11px; color: var(--muted); margin-left: -2px; }
 .morning .recallbtn { padding: 6px 12px 6px 14px; font-size: 13.5px; gap: 6px; }
 .morning .recallbtn svg { width: 14px; height: 14px; }
 .morning .recallbtn:disabled { padding: 3px 0; border: 0; background: none; font: 12px var(--mono); }
@@ -1311,7 +1317,7 @@ button.chipm { border: 0; cursor: pointer; }
 
 /* ---------- Cram: a screen of its own for getting one course ready (src/home/cram.ts) ---------- */
 html.cramming { overflow: hidden; }
-.cram { position: fixed; inset: 0; z-index: 800; display: grid; place-items: center; padding: max(14px, 3vh) max(14px, 3vw); background: color-mix(in srgb, var(--desk) 62%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); animation: fadein .22s ease-out both; }
+.cramscreen { position: fixed; inset: 0; z-index: 800; display: grid; place-items: center; padding: max(14px, 3vh) max(14px, 3vw); background: color-mix(in srgb, var(--desk) 62%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.1); backdrop-filter: blur(14px) saturate(1.1); animation: fadein .22s ease-out both; }
 .crsheet { width: min(1120px, 100%); height: min(820px, 100%); background: var(--paper); border: 1px solid var(--line); border-radius: 28px; box-shadow: 0 40px 100px -30px rgba(8, 8, 30, .6), 0 0 0 1px color-mix(in srgb, var(--cc) 18%, transparent); overflow: hidden; display: flex; animation: crin .42s cubic-bezier(.2, .9, .25, 1.15) both; position: relative; }
 .crsheet::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 5px; background: var(--cc); }
 @keyframes crin { from { opacity: 0; transform: translateY(26px) scale(.965); } }
@@ -1461,7 +1467,7 @@ html.cramming { overflow: hidden; }
 .crsh .crlink { white-space: nowrap; }
 
 @media (max-width: 760px) {
-  .cram { padding: 0; }
+  .cramscreen { padding: 0; }
   .crsheet { height: 100%; border-radius: 0; border: 0; }
   .crbody { padding: calc(20px + env(safe-area-inset-top, 0px)) 16px calc(18px + env(safe-area-inset-bottom, 0px)); }
   .crsetup, .crdone { grid-template-columns: 1fr; }
@@ -1470,4 +1476,4 @@ html.cramming { overflow: hidden; }
   .crrun { justify-content: flex-start; }
   .crgrade small { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .cram, .crsheet, .crcard, .crgq { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .cramscreen, .crsheet, .crcard, .crgq { animation: none; } }

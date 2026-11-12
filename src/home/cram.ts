@@ -106,7 +106,7 @@ export function openCram(o: Opts) {
     first: new Map(), last: new Map(), tries: new Map(), order: [], started: 0, ended: 0, pct0: readiness(o.courseId).pct, graded: false };
   const el = document.createElement("div");
   el.id = "cram";
-  el.className = "cram";
+  el.className = "cramscreen"; // not "cram": that class is the Cram button in the exam pop-up
   el.setAttribute("role", "dialog");
   el.setAttribute("aria-modal", "true");
   el.setAttribute("aria-label", `Cram for ${courseName(o.courseId)}`);

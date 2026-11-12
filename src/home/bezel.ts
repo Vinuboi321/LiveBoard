@@ -117,6 +117,8 @@ function frame(now: number) {
   const still = quiet();
   if (!still) raf = requestAnimationFrame(frame);
   if (document.hidden) { last = now; return; }
+  // at rest the drift is slow, so half the frame rate looks the same and costs half as much; full rate while the dial moves
+  if (!still && now - last < 30 && Math.abs(vel) < 2 && !pulses.length && Math.abs(getRot() - lastRot) < 0.01) return;
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   t += dt;
