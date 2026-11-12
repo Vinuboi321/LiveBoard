@@ -89,7 +89,6 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       <div class="ptop">
         <div class="pleft">
           <button class="stream" id="backBtn" aria-label="Return to dial">
-            <span class="streamdial" aria-hidden="true"></span>
             <span class="streamflow" aria-hidden="true">
               <svg viewBox="0 0 400 22" preserveAspectRatio="none"><defs><linearGradient id="streamG" x1="0" x2="1"><stop offset="0"/><stop offset=".5"/><stop offset="1"/></linearGradient></defs>
                 <path class="w1" d="M-40 9 q10 -7 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0"/><path class="w2" d="M-60 16 q15 -6 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0"/></svg></span>
