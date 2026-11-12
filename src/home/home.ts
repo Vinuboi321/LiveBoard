@@ -35,6 +35,10 @@ interface Item { b: Band; label: string; ns: Note[]; w: number; loose?: boolean;
 interface Recall { queue: string[]; i: number; revealed: boolean; got: number; done: boolean; k: number; typed: string; missed: string[]; cram: string | null; ai: string | null; checking: boolean; flipped?: boolean }
 
 let items: Item[] = [];
+/* The knob at the top of the dial. It rests at the top; grabbed, it travels round the rim to whatever you point it at, and on
+   letting go the dial brings that note or folder up to the top with the knob riding on it. Arrow keys, the wheel and taps do
+   the same: the knob darts out to the chosen item and comes home with it. knob is its angle from the top in degrees. */
+let knob = 0, knobDrag: number | null = null, knobFollow = -1, knobDrawn = 0;
 let rot = 0, target = 0, sel = -1, hoverF = -1, hoverNote: string | null = null, dragging = false, lastDrawn: number | null = null, raf = 0;
 let G: { c: number; rF: number; hub: number; push: number; els: HTMLElement[]; turn: HTMLElement[] } = { c: 0, rF: 0, hub: 0, push: 0, els: [], turn: [] };
 let R: Recall | null = null;
@@ -509,6 +513,7 @@ function loop() {
   if (!alive || !$("#dial")) return;
   if (!dragging) { const d = target - rot; rot = Math.abs(d) < 0.03 ? target : rot + d * (reducedMotion() ? 1 : 0.14); }
   if (rot !== lastDrawn) { draw(); lastDrawn = rot; }
+  moveKnob();
   raf = requestAnimationFrame(loop);
 }
 const snapFrom = (r: number) => {
@@ -517,7 +522,16 @@ const snapFrom = (r: number) => {
   items.forEach((f, k) => { const d = Math.abs(wrapDeg(f.ang + r)); if (d < bd) { bd = d; bk = k; } });
   return r - wrapDeg(items[bk].ang + r);
 };
-const goTo = (k: number) => { if (!items.length) return; k = ((k % items.length) + items.length) % items.length; target = rot - wrapDeg(items[k].ang + rot); };
+const goTo = (k: number) => { if (!items.length) return; k = ((k % items.length) + items.length) % items.length; target = rot - wrapDeg(items[k].ang + rot); knobFollow = reducedMotion() ? -1 : k; };
+const nearestTo = (deg: number) => { let bk = 0, bd = 999; items.forEach((f, k) => { const d = Math.abs(wrapDeg(f.ang + rot - deg)); if (d < bd) { bd = d; bk = k; } }); return bk; };
+function moveKnob() {
+  const f = knobFollow >= 0 ? items[knobFollow] : null;
+  const want = knobDrag !== null ? knobDrag : f ? wrapDeg(f.ang + rot) : 0;
+  const gap = wrapDeg(want - knob);
+  knob = Math.abs(gap) < 0.05 ? want : knob + gap * (knobDrag !== null ? 0.55 : 0.3);
+  if (knobDrag === null && f && rot === target && knob === want) knobFollow = -1; // home again
+  if (knob !== knobDrawn) { $("#pointer")?.style.setProperty("--k", knob.toFixed(2) + "deg"); knobDrawn = knob; }
+}
 
 /** Dark text on light course colors (yellow, mint), white on dark ones, so labels stay readable. */
 function inkOn(hex: string) {
@@ -618,7 +632,7 @@ function bindDial() {
   const ang = (e: PointerEvent) => { const r = d.getBoundingClientRect(); return Math.atan2(e.clientX - (r.left + r.width / 2), -(e.clientY - (r.top + r.height / 2))) * 180 / Math.PI; };
   d.addEventListener("pointerdown", e => {
     if (diving || e.button > 0 || (e.target as Element).closest(".hub")) return;
-    dragging = true; moved = 0; v = 0; last = ang(e);
+    dragging = true; moved = 0; v = 0; last = ang(e); knobFollow = -1;
     downEl = (e.target as Element).closest<HTMLElement>(".seeall,.file,.folder");
     pid = e.pointerId; d.setPointerCapture(pid); d.classList.add("dragging");
   });
@@ -640,6 +654,30 @@ function bindDial() {
   };
   d.addEventListener("pointerup", up);
   d.addEventListener("pointercancel", up);
+  // the knob: drag it round the rim to point at something; let go and the dial brings it up
+  const kn = $("#pointer")!;
+  let kpid: number | null = null, kmoved = false;
+  kn.addEventListener("pointerdown", e => {
+    e.stopPropagation();
+    if (diving || R || e.button > 0) return;
+    kpid = e.pointerId; kn.setPointerCapture(kpid); kmoved = false; knobFollow = -1; knobDrag = ang(e); d.classList.add("knobbing");
+  });
+  kn.addEventListener("pointermove", e => {
+    if (e.pointerId !== kpid || knobDrag === null) return;
+    knobDrag = ang(e);
+    if (Math.abs(knobDrag) > 4) kmoved = true;
+    const k = nearestTo(knobDrag);
+    if (kmoved && k !== hoverF) { hoverF = k; hoverNote = null; paint(); updateInfo(); navigator.vibrate?.(4); }
+  });
+  const kup = (e: PointerEvent) => {
+    if (e.pointerId !== kpid || knobDrag === null) return;
+    const k = nearestTo(knobDrag);
+    kpid = null; knobDrag = null; d.classList.remove("knobbing");
+    if (hoverF >= 0) { hoverF = -1; hoverNote = null; paint(); updateInfo(); }
+    if (kmoved) goTo(k);
+  };
+  kn.addEventListener("pointerup", kup);
+  kn.addEventListener("pointercancel", kup);
   const folders = $("#folders")!;
   folders.addEventListener("pointerover", e => {
     if (dragging || diving || e.pointerType === "touch" || R) return;

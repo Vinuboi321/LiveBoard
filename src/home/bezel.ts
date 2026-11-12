@@ -3,8 +3,9 @@
 
    - a bezel of fine ticks round the hub that turns with the dial. The ticks swell toward the pointer, a slow wave
      travels round them when nothing is happening, and when you spin the dial the swell leans back like a wake;
-   - time dust: small motes drifting along the dial's track at different depths, which the dial drags with it when
-     it turns, as if stirred. The ones passing the pointer catch the accent colour;
+   - study sprites: small things from a student's week drifting along the dial's track at different depths (bits of
+     maths and science, tiny graphs, an atom, a grade), with a little plain dust between them. The dial drags them
+     with it when it turns, as if stirred, and the ones passing the pointer catch the accent colour;
    - a short arc of light on the hub's rim under the pointer, widening with speed;
    - a ring that runs outward from the hub each time a new note or folder comes under the pointer.
 
@@ -12,7 +13,42 @@
    With reduced motion on, it draws once per change and nothing drifts. */
 
 type Geo = { size: number; rF: number; hubR: number };
-type Mote = { a: number; depth: number; speed: number; r: number; alpha: number; off: number };
+type Mote = { a: number; depth: number; speed: number; r: number; alpha: number; off: number; kind: number; tilt: number };
+
+/* What the sprites are. Text ones are set in an italic serif like a textbook (grades in bold sans); the rest are
+   drawn as a few strokes in a box of about ±1 unit. */
+const WORDS = ["π", "∑", "∫", "√x", "Δx", "x²", "∞", "θ", "λ", "E=mc²", "a²+b²", "F=ma", "H₂O", "dy/dx", "sin θ", "A+", "A", "B+", "98%", "≈", "f(x)", "μ", "CO₂", "½"];
+const GRADE = /^(A\+?|B\+|\d+%)$/;
+type Draw = (g: CanvasRenderingContext2D, u: number) => void;
+const SHAPES: Draw[] = [
+  (g, u) => { // a sine curve on axes
+    g.beginPath(); g.moveTo(-u, -u); g.lineTo(-u, u); g.lineTo(u, u); g.stroke();
+    g.beginPath(); for (let i = 0; i <= 16; i++) { const x = -u + (i / 16) * 2 * u, y = Math.sin((i / 16) * Math.PI * 2) * u * 0.6; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+  },
+  (g, u) => { // a bar chart, rising
+    g.beginPath(); g.moveTo(-u, u); g.lineTo(u, u); g.stroke();
+    [0.5, 0.9, 1.3, 1.8].forEach((h, i) => g.fillRect(-u + 0.12 * u + i * 0.48 * u, u - h * u, 0.3 * u, h * u));
+  },
+  (g, u) => { // a parabola through its axes
+    g.beginPath(); g.moveTo(-u, 0.55 * u); g.lineTo(u, 0.55 * u); g.moveTo(0, -u); g.lineTo(0, u); g.stroke();
+    g.beginPath(); for (let i = 0; i <= 14; i++) { const k = -1 + (i / 14) * 2, x = k * u * 0.85, y = 0.55 * u - k * k * u * 1.4; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke();
+  },
+  (g, u) => { // an atom
+    for (const r of [0, Math.PI / 3, -Math.PI / 3]) { g.beginPath(); g.ellipse(0, 0, u * 1.1, u * 0.42, r, 0, Math.PI * 2); g.stroke(); }
+    g.beginPath(); g.arc(0, 0, u * 0.16, 0, Math.PI * 2); g.fill();
+  },
+  (g, u) => { // a scatter with its trend line
+    g.beginPath(); g.moveTo(-u, -u); g.lineTo(-u, u); g.lineTo(u, u); g.stroke();
+    for (const [x, y] of [[-0.6, 0.5], [-0.2, 0.1], [0.1, 0.25], [0.45, -0.3], [0.8, -0.6]]) { g.beginPath(); g.arc(x * u, y * u, u * 0.11, 0, Math.PI * 2); g.fill(); }
+    g.beginPath(); g.moveTo(-0.8 * u, 0.62 * u); g.lineTo(0.9 * u, -0.7 * u); g.stroke();
+  },
+  (g, u) => { // a flask
+    g.beginPath(); g.moveTo(-0.3 * u, -u); g.lineTo(-0.3 * u, -0.2 * u); g.lineTo(-0.9 * u, u); g.lineTo(0.9 * u, u); g.lineTo(0.3 * u, -0.2 * u); g.lineTo(0.3 * u, -u); g.moveTo(-0.45 * u, -u); g.lineTo(0.45 * u, -u); g.moveTo(-0.6 * u, 0.45 * u); g.lineTo(0.6 * u, 0.45 * u); g.stroke();
+  },
+  (g, u) => { // a right triangle with its square corner
+    g.beginPath(); g.moveTo(-u, u); g.lineTo(u, u); g.lineTo(-u, -0.8 * u); g.closePath(); g.moveTo(-u, 0.65 * u); g.lineTo(-0.65 * u, 0.65 * u); g.lineTo(-0.65 * u, u); g.stroke();
+  },
+];
 
 let cv: HTMLCanvasElement | null = null, g: CanvasRenderingContext2D | null = null;
 let raf = 0, last = 0, t = 0, lastRot = 0, vel = 0, dpr = 1;
@@ -46,7 +82,11 @@ export function startBezel(dial: HTMLElement, rot: () => number, geo: () => Geo)
   // a fixed scatter, so the dust looks the same each visit instead of reshuffling
   let seed = 7;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  motes = Array.from({ length: 54 }, () => ({ a: rnd() * 360, depth: rnd(), speed: 0.5 + rnd() * 2.2, r: 0.7 + rnd() * 1.5, alpha: 0.14 + rnd() * 0.36, off: (rnd() - 0.5) * 2 }));
+  // 30 sprites spread evenly round the track (each kind used about once), then 20 specks of plain dust (kind -1)
+  const kinds = WORDS.length + SHAPES.length, start = Math.floor(rnd() * kinds);
+  motes = Array.from({ length: 50 }, (_, i) => i < 30
+    ? { a: i * 12 + rnd() * 7, depth: rnd(), speed: 0.5 + rnd() * 1.6, r: 1, alpha: 0.3 + rnd() * 0.3, off: (rnd() - 0.5) * 2, kind: (start + i * 7) % kinds, tilt: (rnd() - 0.5) * 0.5 }
+    : { a: rnd() * 360, depth: rnd(), speed: 0.5 + rnd() * 2.2, r: 0.7 + rnd() * 1.3, alpha: 0.14 + rnd() * 0.3, off: (rnd() - 0.5) * 2, kind: -1, tilt: 0 });
   recolor(dial);
   if (quiet()) frame(performance.now());
   else raf = requestAnimationFrame(frame);
@@ -124,16 +164,32 @@ function frame(now: number) {
   g.lineWidth = 4.5;
   g.beginPath(); g.arc(c, c, hubR + 1.5, mid - half, mid + half); g.stroke();
 
-  // ---- time dust on the track ----
+  // ---- study sprites and dust on the track ----
+  g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round";
   for (const m of motes) {
-    if (!still) m.a += m.speed * dt * (1 + speed * 3) + vel * dt * (0.25 + m.depth * 0.5); // the dial drags it along, nearer motes more
+    if (!still) m.a += m.speed * dt * (1 + speed * 3) + vel * dt * (0.25 + m.depth * 0.5); // the dial drags them along, nearer ones more
     const d = wrap(m.a), rad = (m.a - 90) * Math.PI / 180;
-    const rr = rF + m.off * (10 + m.depth * 16) + Math.sin(t * 0.7 + m.a) * 2;
+    const sprite = m.kind >= 0;
+    // sprites range from just outside the bezel to the dial's edge, so most float clear of the cards; dust keeps to the track
+    const rr = (sprite ? hubR + 30 + (m.off * 0.5 + 0.5) * Math.max(20, size / 2 - hubR - 44) : rF + m.off * (10 + m.depth * 16)) + Math.sin(t * 0.7 + m.a) * 2;
     const near = Math.exp(-(d * d) / (2 * 22 * 22));
-    g.fillStyle = near > 0.2 ? `rgba(${accent}, ${Math.min(0.95, m.alpha + near * 0.5).toFixed(3)})` : `rgba(${ink}, ${m.alpha.toFixed(3)})`;
-    g.beginPath();
-    g.arc(c + Math.cos(rad) * rr, c + Math.sin(rad) * rr, m.r * (0.8 + m.depth * 0.7) * (1 + near * 0.8), 0, Math.PI * 2);
-    g.fill();
+    const x = c + Math.cos(rad) * rr, y = c + Math.sin(rad) * rr + (sprite && !still ? Math.sin(t * 0.9 + m.off * 9) * 2.5 : 0);
+    const col = near > 0.2 ? `rgba(${accent}, ${Math.min(0.95, m.alpha + near * 0.5).toFixed(3)})` : `rgba(${ink}, ${m.alpha.toFixed(3)})`;
+    g.fillStyle = col; g.strokeStyle = col;
+    if (!sprite) { g.beginPath(); g.arc(x, y, m.r * (0.8 + m.depth * 0.7) * (1 + near * 0.8), 0, Math.PI * 2); g.fill(); continue; }
+    const scale = (0.8 + m.depth * 0.5) * (1 + near * 0.3);
+    g.save();
+    g.translate(x, y);
+    g.rotate(m.tilt + (still ? 0 : Math.sin(t * 0.5 + m.off * 7) * 0.1)); // they stay upright and rock a little; they never spin with the ring
+    if (m.kind < WORDS.length) {
+      const w = WORDS[m.kind];
+      g.font = GRADE.test(w) ? `800 ${(12 * scale).toFixed(1)}px Inter, system-ui, sans-serif` : `italic 600 ${((w.length > 3 ? 11.5 : 15) * scale).toFixed(1)}px Georgia, "Times New Roman", serif`;
+      g.fillText(w, 0, 0);
+    } else {
+      g.lineWidth = 1.25; g.lineCap = "round";
+      SHAPES[m.kind - WORDS.length](g, 7 * scale);
+    }
+    g.restore();
   }
 
   // ---- a ring runs outward when something new comes under the pointer ----

@@ -418,6 +418,24 @@ const BASE = process.env.BASE || "http://localhost:4173";
     await p.keyboard.press("Escape");
   }
 
+  // the knob on the dial's rim can be dragged to an item; letting go brings that item to the top and the knob home
+  {
+    await p.setViewportSize({ width: 1280, height: 800 });
+    await p.goto(BASE); await p.waitForSelector("#folders .folder"); await p.waitForTimeout(2600);
+    const want = await p.evaluate(() => { const all = [...document.querySelectorAll("#folders .folder")]; return all[Math.floor(all.length / 2)].dataset.f; }); // the item farthest round from the top
+    const fb = await (await p.$(`#folders .folder[data-f="${want}"]`)).boundingBox();
+    const kb = await (await p.$("#pointer")).boundingBox();
+    await p.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2); await p.mouse.down();
+    await p.mouse.move(fb.x + fb.width / 2 + 60, fb.y + fb.height / 2, { steps: 12 });
+    await p.mouse.move(fb.x + fb.width / 2, fb.y + fb.height / 2, { steps: 6 }); await p.waitForTimeout(400);
+    const out = await p.evaluate(() => parseFloat(document.querySelector("#pointer").style.getPropertyValue("--k")) || 0);
+    ok(Math.abs(out) > 60, "dragging the dial's knob carries it round the rim");
+    await p.mouse.up(); await p.waitForTimeout(2200);
+    const after = await p.evaluate(w => ({ k: parseFloat(document.querySelector("#pointer").style.getPropertyValue("--k")) || 0, open: document.querySelector(`#folders .folder[data-f="${w}"]`).classList.contains("open") }), want);
+    ok(after.open, "letting go brings the pointed-at folder under the pointer");
+    ok(Math.abs(after.k) < 1, "and the knob returns to the top");
+  }
+
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL REGRESSIONS PASS");
   process.exit(errs.length ? 1 : 0);
