@@ -248,7 +248,9 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
   await E.click("#editor .ProseMirror");
   await E.evaluate(() => { const dt = new DataTransfer(); dt.setData("text/html", Array.from({ length: 2600 }, (_, i) => `<p>${i} ${"x".repeat(900)}</p>`).join("")); document.querySelector("#editor .ProseMirror").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); });
   await E.waitForTimeout(3500);
-  ok(!serverNote(U5, "Huge note"), "a note over the server's size limit isn't sent");
+  // the title alone may sync in the moment before the paste lands (that version is small and fine); what must never arrive is the oversized body
+  const hugeOnServer = serverNote(U5, "Huge note");
+  ok(!hugeOnServer || JSON.stringify(hugeOnServer.data).length < 200000, "a note over the server's size limit isn't sent");
   ok((await local(E, `liveboard-u-${U5}`)).outbox > 0 && /couldn't upload/.test((await E.textContent("#syncState")) || ""), "it stays queued and flagged as not uploaded");
 
   /* 7. Typing during an upload that comes back as a conflict keeps the latest words (Codex release check #2) */

@@ -191,8 +191,9 @@ button.chip:hover { border-color: color-mix(in srgb, var(--cobalt) 55%, var(--li
 .paper.landing { animation: land .46s cubic-bezier(.2, .8, .2, 1) both; }
 @keyframes land { from { opacity: .4; transform: perspective(1400px) translateZ(90px) rotateX(3deg); } }
 #dial.dragging { cursor: grabbing; }
-.ringline { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; border: 2px dotted color-mix(in srgb, var(--cobalt) 35%, transparent); pointer-events: none; }
-.pointer { position: absolute; left: 50%; top: 2px; width: 0; height: 0; transform: translateX(-50%); border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 11px solid var(--g1); pointer-events: none; z-index: 500; }
+.ringline { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); border-radius: 50%; border: 1.5px dotted color-mix(in srgb, var(--ink) 13%, transparent); pointer-events: none; }
+/* the pointer is a notch of light, not an arrow */
+.pointer { position: absolute; left: 50%; top: 0; width: 4px; height: 15px; transform: translateX(-50%); border-radius: 3px; background: var(--ink); box-shadow: 0 0 0 2px var(--desk), 0 0 14px 2px color-mix(in srgb, var(--hc) 80%, transparent); pointer-events: none; z-index: 500; transition: box-shadow .4s; }
 .folder { position: absolute; left: 0; top: 0; width: var(--W); height: calc(var(--W) * .74); font-size: calc(var(--W) / 13); will-change: transform; transition: opacity .25s; perspective: 34em; }
 .fback { position: absolute; inset: 10% 0 0 0; background: color-mix(in srgb, var(--fc) 72%, #000 28%); border-radius: .6em; }
 .ftab { position: absolute; left: 7%; top: -1.1em; width: 34%; height: 1.4em; background: color-mix(in srgb, var(--fc) 72%, #000 28%); border-radius: .5em .5em 0 0; }
@@ -226,21 +227,30 @@ button.chip:hover { border-color: color-mix(in srgb, var(--cobalt) 55%, var(--li
 .file.solo .md { width: .7em; height: .7em; top: .8em; right: .8em; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 
-.hub { position: absolute; left: 50%; top: 50%; width: var(--hub); height: var(--hub); transform: translate(-50%, -50%); border-radius: 50%; border: 7px solid transparent;
-  background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--hc) 22%, var(--paper)), var(--paper) 74%) padding-box;
-  box-shadow: var(--shadow), 0 0 60px color-mix(in srgb, var(--hc) 22%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding-top: calc(var(--hub) * .045); z-index: 60; cursor: default;
-  transition: width .45s cubic-bezier(.2, .8, .2, 1), height .45s cubic-bezier(.2, .8, .2, 1); }
+/* The hub is calm: neutral glass, no tint. Colour belongs to the folders and files around it; the hub borrows only a
+   thread of the selected one's colour (the lit stretch of its ring, a dot, the light under the pointer). What makes it
+   lively is motion: it leans toward the pointer like a dome, and the bezel and dust around it are drawn in bezel.ts. */
+.hub { position: absolute; left: 50%; top: 50%; width: var(--hub); height: var(--hub); border-radius: 50%; border: 7px solid transparent;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(var(--hx, 0deg)) rotateY(var(--hy, 0deg));
+  background: radial-gradient(circle at 50% 24%, color-mix(in srgb, var(--ink) 7%, var(--paper)), var(--paper) 72%) padding-box;
+  box-shadow: var(--shadow), 0 26px 60px -30px rgba(8, 8, 30, .55), inset 0 1px 0 rgba(255, 255, 255, .10), inset 0 -30px 50px -40px color-mix(in srgb, var(--ink) 30%, transparent), 0 0 46px color-mix(in srgb, var(--hc) 7%, transparent);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding-top: calc(var(--hub) * .045); z-index: 60; cursor: default;
+  transition: width .45s cubic-bezier(.2, .8, .2, 1), height .45s cubic-bezier(.2, .8, .2, 1), transform .28s ease-out; }
+/* light on the glass, sliding opposite to the lean */
+.hub::after { content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none; background: radial-gradient(58% 40% at var(--lx, 50%) var(--ly, 20%), rgba(255, 255, 255, .11), transparent 70%); transition: background .28s ease-out; }
+:root { --ringmute: color-mix(in srgb, var(--ink) 15%, transparent); }
+.bezel { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 1; }
 /* The ring is the time scale: colored by what sits in each direction, turning with the dial (see paintRing). */
 .hubring { position: absolute; inset: -7px; border-radius: 50%; pointer-events: none; will-change: transform;
-  background: var(--ring, conic-gradient(from -20deg, var(--g1), var(--g2), var(--g3), var(--g4), var(--g5), var(--g6), var(--g7), var(--g1)));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)); }
-.hubticks { position: absolute; inset: 3px; border-radius: 50%; pointer-events: none; will-change: transform; opacity: .5; }
+  background: var(--ring, conic-gradient(var(--ringmute), var(--ringmute)));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4.5px)); }
+.hubticks { display: none; position: absolute; inset: 3px; border-radius: 50%; pointer-events: none; will-change: transform; opacity: .5; }
 .hubticks::before, .hubticks::after { content: ""; position: absolute; inset: 0; border-radius: 50%; }
 .hubticks::before { background: repeating-conic-gradient(from -.35deg, color-mix(in srgb, var(--ink) 30%, transparent) 0 .7deg, transparent .7deg 6deg);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 7px), #000 calc(100% - 6.5px)); }
 .hubticks::after { background: repeating-conic-gradient(from -.6deg, color-mix(in srgb, var(--ink) 55%, transparent) 0 1.2deg, transparent 1.2deg 30deg);
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 11px), #000 calc(100% - 10.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 11px), #000 calc(100% - 10.5px)); }
-.dialglow { position: absolute; inset: -16%; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--hc) 20%, transparent), transparent 74%); }
+.dialglow { position: absolute; inset: -16%; border-radius: 50%; pointer-events: none; background: radial-gradient(closest-side, color-mix(in srgb, var(--hc) 8%, transparent), transparent 74%); }
 .hubprog { position: absolute; inset: -7px; width: calc(100% + 14px); height: calc(100% + 14px); transform: rotate(-90deg); pointer-events: none; opacity: 0; transition: opacity .3s; }
 .hubprog circle { fill: none; stroke: var(--ink); stroke-width: 3.2; stroke-linecap: round; transition: stroke-dashoffset .5s cubic-bezier(.2, .8, .2, 1); }
 #dial.recall .hubprog { opacity: 1; }
@@ -1289,3 +1299,14 @@ button.chipm { border: 0; cursor: pointer; }
 .mdone span { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdone small { font: 10.5px var(--mono); color: var(--muted); }
 .mdone p { margin: 2px 8px; font: 11px var(--mono); color: var(--muted); }
+
+/* ---------- The hub's contents, toned down: ink and paper, with colour only where you act ---------- */
+.hub .pill, #infoSlot .pill { background: none !important; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); display: inline-flex; align-items: center; gap: 7px; }
+.hub .pill::before, #infoSlot .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--hc); flex: 0 0 auto; box-shadow: 0 0 8px var(--hc); }
+.hub .band, #infoSlot .band { color: var(--muted); }
+.hub .stat, #infoSlot .stat { background: color-mix(in srgb, var(--ink) 6%, var(--paper)); }
+.hub .bignum, #infoSlot .bignum { background: none; -webkit-background-clip: border-box; background-clip: border-box; -webkit-text-fill-color: currentColor; color: var(--ink); }
+.hub .openlink, #infoSlot .openlink { background: var(--ink); color: var(--paper); box-shadow: 0 8px 18px -8px rgba(8, 8, 30, .6); transition: transform .16s cubic-bezier(.2, .9, .25, 1.5), box-shadow .2s; }
+.hub .openlink:hover, #infoSlot .openlink:hover { transform: translateY(-2px) scale(1.04); box-shadow: 0 10px 22px -8px color-mix(in srgb, var(--hc) 80%, transparent); }
+.hbtn svg { background: color-mix(in srgb, var(--ink) 8%, var(--paper)); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); transition: transform .16s cubic-bezier(.2, .9, .25, 1.5), background .2s, color .2s, box-shadow .2s; }
+.hbtn:hover svg { background: var(--hb); color: #fff; box-shadow: 0 8px 18px color-mix(in srgb, var(--hb) 50%, transparent); }

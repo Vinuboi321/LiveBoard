@@ -7,6 +7,8 @@ import { aiHealth, askMarker } from "../ai";
 import { compareAnswer, fingerprint, forecast, gradeMarker, isDue, recallable, recallText, studiedOn, upcomingExams } from "../study";
 import { renderSky } from "./sky";
 import { closeMap, openMap } from "./map";
+import { pulse, recolor, startBezel, stopBezel } from "./bezel";
+import { onTheme } from "../theme";
 import { closeShelf, openShelf } from "./shelf";
 
 /* The home screen: a morning strip over a spinning dial of notes arranged by when they were last opened.
@@ -43,6 +45,7 @@ let aiOn = false;
 aiHealth().then(h => { aiOn = h.ai; });
 let handlers: { openNote: (id: string) => void; newBlank: () => void; importFile: () => void; openSettings: (section?: string) => void } | null = null;
 let alive = false;
+onTheme(() => recolor($("#dial"))); // light or dark: the bezel re-reads its ink
 let introduced = false; // the 3D rise plays once per launch, not every time you come back to the dial
 let three = false;      // while it plays, cards float above the tilted dial and keep facing you
 let swipeNext = false;  // the next note opens with the page swiping away (set by the marker cards under the dial)
@@ -313,6 +316,10 @@ export function renderHome(stage: HTMLElement, h: NonNullable<typeof handlers>, 
   sel = -1; hoverF = -1; hoverNote = null;
   sizeDial();
   bindDial();
+  { // the dial's moving parts: bezel ticks, time dust and the light under the pointer (see bezel.ts)
+    const dialEl = $("#dial")!, hubNow = $("#hub")!;
+    startBezel(dialEl, () => rot, () => (G ? { size: G.c * 2, rF: G.rF, hubR: (hubNow.offsetWidth || G.hub) / 2 } : { size: 0, rF: 0, hubR: 0 }));
+  }
   if (keep) { rot = prevRot; target = prevTarget; }
   else {
     let k = items.findIndex(f => f.ns.some(n => n.id === focusNote));
@@ -385,6 +392,7 @@ export const cardFor = (noteId: string) => document.querySelector<HTMLElement>(`
 
 export function destroyHome() {
   alive = false;
+  stopBezel();
   hidePeek(true);
   closeMap(true);
   closeShelf(true);
@@ -442,12 +450,17 @@ function paintRing() {
   const el = $("#hubring");
   if (!el) return;
   if (!items.length) { el.style.removeProperty("--ring"); return; }
-  const col = (f: Item) => (f.loose ? courseColor(f.ns[0].courseId) : `var(${FOLDC[BANDS.indexOf(f.b) % FOLDC.length][0]})`);
-  const h0 = items[0].span / 2, last = items[items.length - 1], end = Math.min(last.ang + last.span / 2, 350 - h0);
-  const stops = [`${col(items[0])} 0deg`, `${col(items[0])} ${h0.toFixed(1)}deg`];
-  items.slice(1).forEach(f => stops.push(`${col(f)} ${Math.max(h0, f.ang - f.span / 2).toFixed(1)}deg`, `${col(f)} ${Math.min(end, f.ang + f.span / 2).toFixed(1)}deg`));
-  if (items.length > 1) stops.push(`var(--line) ${(end + 8).toFixed(1)}deg`, `var(--line) ${(352 - h0).toFixed(1)}deg`);
-  stops.push(`${col(items[0])} ${(360 - h0).toFixed(1)}deg`, `${col(items[0])} 360deg`);
+  // Quiet by default: every stretch is the same soft grey with a hairline gap between bands, so the ring still shows
+  // how time is divided. Only the stretch under the pointer is lit, in that note's or folder's colour.
+  const col = (f: Item, i: number) => i !== sel ? "var(--ringmute)" : (f.loose ? courseColor(f.ns[0].courseId) : `var(${FOLDC[BANDS.indexOf(f.b) % FOLDC.length][0]})`);
+  const h0 = items[0].span / 2, last = items[items.length - 1], end = Math.min(last.ang + last.span / 2, 350 - h0), gap = 1.1;
+  const stops = [`${col(items[0], 0)} 0deg`, `${col(items[0], 0)} ${(h0 - gap).toFixed(1)}deg`, `transparent ${(h0 - gap).toFixed(1)}deg`, `transparent ${h0.toFixed(1)}deg`];
+  items.slice(1).forEach((f, j) => {
+    const from = Math.max(h0, f.ang - f.span / 2), to = Math.min(end, f.ang + f.span / 2);
+    stops.push(`${col(f, j + 1)} ${from.toFixed(1)}deg`, `${col(f, j + 1)} ${(to - gap).toFixed(1)}deg`, `transparent ${(to - gap).toFixed(1)}deg`, `transparent ${to.toFixed(1)}deg`);
+  });
+  if (items.length > 1) stops.push(`transparent ${(end + 8).toFixed(1)}deg`, `transparent ${(352 - h0).toFixed(1)}deg`);
+  stops.push(`transparent ${(360 - h0).toFixed(1)}deg`, `${col(items[0], 0)} ${(360 - h0 + gap).toFixed(1)}deg`, `${col(items[0], 0)} 360deg`);
   el.style.setProperty("--ring", `conic-gradient(${stops.join(", ")})`);
 }
 
@@ -466,6 +479,8 @@ function draw() {
     const first = sel < 0;
     sel = best;
     updateInfo();
+    paintRing(); // the lit stretch follows the pointer
+    if (!first) pulse();
     if (!first && !reducedMotion()) { // a small detent as each note passes the pointer
       $("#pointer")?.animate([{ translate: "0 0" }, { translate: "0 4px" }, { translate: "0 0" }], { duration: 170, easing: "ease-out" });
       if (dragging) navigator.vibrate?.(4);
@@ -512,7 +527,7 @@ function inkOn(hex: string) {
   const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   return (L + 0.05) / 0.05 > 1.05 / (L + 0.05) ? "#1B1638" : "#fff";
 }
-function setHc(v: string, el: HTMLElement) { [$("#dial"), el].forEach(x => { x?.style.setProperty("--hc", v); x?.style.setProperty("--hcink", inkOn(v)); }); }
+function setHc(v: string, el: HTMLElement) { [$("#dial"), el].forEach(x => { x?.style.setProperty("--hc", v); x?.style.setProperty("--hcink", inkOn(v)); }); recolor($("#dial")); }
 function updateInfo() {
   if (R) return;
   const el = $("#info"), fi = hoverF >= 0 ? hoverF : sel, f = items[fi];
@@ -632,6 +647,19 @@ function bindDial() {
     const fi = fo ? Number(fo.dataset.f) : -1, nn = fl ? fl.dataset.n! : null;
     if (fi !== hoverF || nn !== hoverNote) { hoverF = fi; hoverNote = nn; paint(); updateInfo(); }
   });
+  // the hub is a dome of glass: it leans a few degrees toward the pointer and the light on it moves the other way
+  const hubEl = $("#hub")!;
+  const level = () => { ["--hx", "--hy", "--lx", "--ly"].forEach(k => hubEl.style.removeProperty(k)); };
+  d.addEventListener("pointermove", e => {
+    if (e.pointerType === "touch" || diving || three || reducedMotion()) return;
+    const r = d.getBoundingClientRect(), px = Math.max(-1, Math.min(1, (e.clientX - r.left - r.width / 2) / (r.width / 2))), py = Math.max(-1, Math.min(1, (e.clientY - r.top - r.height / 2) / (r.height / 2)));
+    const k = R ? 2 : 6; // steadier while you're reading a recall card
+    hubEl.style.setProperty("--hx", (-py * k).toFixed(2) + "deg");
+    hubEl.style.setProperty("--hy", (px * k).toFixed(2) + "deg");
+    hubEl.style.setProperty("--lx", (50 - px * 26).toFixed(1) + "%");
+    hubEl.style.setProperty("--ly", (24 - py * 16).toFixed(1) + "%");
+  });
+  d.addEventListener("pointerleave", level);
   // a loose card leans toward the pointer, like a card held by its far edge
   let tilted: HTMLElement | null = null;
   const untilt = () => { tilted?.style.removeProperty("--tx"); tilted?.style.removeProperty("--ty"); tilted = null; };
