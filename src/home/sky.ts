@@ -78,7 +78,8 @@ function paint(el: HTMLElement, all: Marker[], W: number, open: (id: string) => 
       });
       const stars = ms.map((m, k) => {
         const [sx, sy] = pts[k], r = (4 + Math.min(3, m.thread.length * 0.5 + (m.links?.length || 0) * 0.4)) * (tall ? 1.35 : 1);
-        return `<g class="star${isDue(m) && recallable(m) ? " due" : ""}" data-m="${m.id}" data-type="${m.type}" data-mastery="${m.mastery}" style="--tw:${(rnd() * 3).toFixed(2)}s"><circle class="hit" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="13"/><circle class="dot" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="${r.toFixed(1)}"/></g>`;
+        const tick = m.closedAt ? `<path class="tick" d="M${(sx - r * 0.5).toFixed(1)} ${sy.toFixed(1)}l${(r * 0.38).toFixed(1)} ${(r * 0.42).toFixed(1)}l${(r * 0.68).toFixed(1)} -${(r * 0.85).toFixed(1)}"/>` : "";
+        return `<g class="star${isDue(m) && recallable(m) ? " due" : ""}${m.closedAt ? " closed" : ""}" data-m="${m.id}" data-type="${m.type}" data-mastery="${m.mastery}" style="--tw:${(rnd() * 3).toFixed(2)}s"><circle class="hit" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="13"/><circle class="dot" cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="${r.toFixed(1)}"/>${tick}</g>`;
       }).join("");
       // the note's name sits under its lowest star; with a crowded sky it only shows for the constellation you point at
       const low = pts.reduce((a, b) => (b[1] > a[1] ? b : a)), title = note(nid)?.title || "";
@@ -110,7 +111,7 @@ function paint(el: HTMLElement, all: Marker[], W: number, open: (id: string) => 
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="A map of your ${all.length} markers, grouped by course. The cards below list the most recent ones.">
       <g class="dust">${dust}</g><g class="threads">${threads}</g>${body}</svg>
     <div class="skylabels" aria-hidden="true">${labels}</div>
-    <div class="skykey" aria-hidden="true"><span><i data-mastery="0"></i>unsure</span><span><i data-mastery="1"></i>getting it</span><span><i data-mastery="2"></i>mastered</span>${threads ? `<span><i class="ln"></i>your links</span>` : ""}</div>
+    <div class="skykey" aria-hidden="true"><span><i data-mastery="0"></i>unsure</span><span><i data-mastery="1"></i>getting it</span><span><i data-mastery="2"></i>mastered</span>${all.some(m => m.closedAt) ? `<span><i class="done"></i>closed out</span>` : ""}${threads ? `<span><i class="ln"></i>your links</span>` : ""}</div>
     <div class="skytip" id="skyTip" hidden></div>`;
   if (!tall) el.style.height = H + "px";
 

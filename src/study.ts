@@ -8,7 +8,7 @@ import { DAY, dayKey, esc } from "./util";
 
 export const isDue = (m: Marker) => m.due <= Date.now();
 export function recallable(m: Marker) {
-  if (m.recallOff) return false;
+  if (m.recallOff || m.closedAt) return false; // a closed-out marker is finished: it stays in the map, not in recall
   if (m.type === "link" && !m.text) return false;
   return !!(m.text || m.recallQ || m.thread.some(t => t.role === "marker" && t.text && !t.text.startsWith("⚠")));
 }

@@ -143,7 +143,7 @@ export function validateBackup(text: string): ValidBackup {
       journeyDraft: isObj(m.journeyDraft) ? {before:str(m.journeyDraft.before,50000,"Journey draft",true)||"",after:str(m.journeyDraft.after,50000,"Journey draft",true)||"",at:num(m.journeyDraft.at,"Journey draft date",0)} : undefined,
       draft: str(m.draft, 50000, `${where}'s draft`, true) || undefined, recallOff: !!m.recallOff,
       passageEditedAt: typeof m.passageEditedAt === "number" ? m.passageEditedAt : null, remindAt: typeof m.remindAt === "number" ? m.remindAt : null,
-      detachedAt: typeof m.detachedAt === "number" ? m.detachedAt : null, outputs,
+      detachedAt: typeof m.detachedAt === "number" ? m.detachedAt : null, closedAt: typeof m.closedAt === "number" ? m.closedAt : null, outputs,
       createdAt: num(m.createdAt, `${where}'s date`, Date.now()), updatedAt: num(m.updatedAt, `${where}'s date`, Date.now()), deleted: !!m.deleted
     };
   });

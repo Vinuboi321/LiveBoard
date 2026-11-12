@@ -87,16 +87,16 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   stage.innerHTML = `
     <article class="paper" id="paper">
       <div class="ptop">
-        <button class="tbtn back" id="backBtn">← Dial</button>
-        <label class="coursesel"><span class="dot" id="cdot" style="background:${courseColor(n.courseId)}"></span>
-          <select id="courseSel" aria-label="Course">${courses.map(c => `<option value="${c.id}" ${c.id === n.courseId ? "selected" : ""}>${esc(c.name)}</option>`).join("")}<option value="__new">+ New course…</option></select>
-          <input id="newCourse" placeholder="Course name" hidden maxlength="32"></label>
-        <span class="spacer"></span>
-        <button class="tbtn test" id="testBtn" aria-pressed="false" title="Leave Test me" hidden>Test me</button>
-        <div class="big3" role="group" aria-label="Note tools">
-          <button class="b3 drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page"><i class="b3dot" aria-hidden="true"></i><span>Marker</span></button>
-          <button class="b3 aa ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Text formatting tools"><b aria-hidden="true">Aa</b><span>Format</span></button>
-          <span class="nmwrap"><button class="orb" id="moreBtn" aria-label="Menu" aria-expanded="false" aria-controls="noteMenu" aria-haspopup="true"><span class="orblabel" aria-hidden="true">Menu</span><i class="orbring" aria-hidden="true"></i><i class="orbcore" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></i><i class="orbdue" aria-hidden="true"></i></button>
+        <div class="pleft">
+          <button class="stream" id="backBtn" aria-label="Return to dial">
+            <span class="streamdial" aria-hidden="true"></span>
+            <span class="streamflow" aria-hidden="true">
+              <svg viewBox="0 0 400 22" preserveAspectRatio="none"><defs><linearGradient id="streamG" x1="0" x2="1"><stop offset="0"/><stop offset=".5"/><stop offset="1"/></linearGradient></defs>
+                <path class="w1" d="M-40 9 q10 -7 20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0 t20 0"/><path class="w2" d="M-60 16 q15 -6 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0"/></svg></span>
+            <span class="streamtxt" aria-hidden="true"><i style="--i:0">R</i><i style="--i:1">e</i><i style="--i:2">t</i><i style="--i:3">u</i><i style="--i:4">r</i><i style="--i:5">n</i><i style="--i:6">&nbsp;</i><i style="--i:7">t</i><i style="--i:8">o</i><i style="--i:9">&nbsp;</i><i style="--i:10">d</i><i style="--i:11">i</i><i style="--i:12">a</i><i style="--i:13">l</i></span>
+          </button>
+          <div class="prow2">
+            <span class="nmwrap"><button class="orb" id="moreBtn" aria-label="Menu" aria-expanded="false" aria-controls="noteMenu" aria-haspopup="true"><i class="orbring" aria-hidden="true"></i><i class="orbcore" aria-hidden="true"><span class="bars"><u></u><u></u><u></u></span></i><i class="orbdue" aria-hidden="true"></i><span class="orblabel" aria-hidden="true">Menu</span></button>
             <div class="notemenu" id="noteMenu" role="menu" hidden>
               <div id="noteMenuTop"></div>
               <div class="nmquick">
@@ -107,6 +107,16 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
               <div id="noteMenuDyn"></div>
               <div class="nmdanger"><button id="delNote">Delete note</button></div>
             </div></span>
+            <label class="coursesel"><span class="dot" id="cdot" style="background:${courseColor(n.courseId)}"></span>
+              <select id="courseSel" aria-label="Course">${courses.map(c => `<option value="${c.id}" ${c.id === n.courseId ? "selected" : ""}>${esc(c.name)}</option>`).join("")}<option value="__new">+ New course…</option></select>
+              <input id="newCourse" placeholder="Course name" hidden maxlength="32"></label>
+          </div>
+        </div>
+        <span class="spacer"></span>
+        <button class="tbtn test" id="testBtn" aria-pressed="false" title="Leave Test me" hidden>Test me</button>
+        <div class="big3" role="group" aria-label="Note tools">
+          <button class="b3 drop" id="dropBtn" aria-pressed="false" title="Drop a marker anywhere on the page"><i class="b3dot" aria-hidden="true"></i><span>Marker</span></button>
+          <button class="b3 aa ${state.meta.showTools ? "on" : ""}" id="toolsBtn" aria-pressed="${state.meta.showTools}" title="Text formatting tools"><b aria-hidden="true">Aa</b><span>Format</span></button>
         </div>
       </div>
       <div class="toolbar" id="toolbar" ${state.meta.showTools ? "" : "hidden"}>${TOOLS.map((t, i) => `<button data-i="${i}" title="${t[1]}" aria-label="${t[1]}">${esc(t[0])}</button>`).join("")}</div>
@@ -567,7 +577,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
   testStyle.id = "testStyle";
   document.head.appendChild(testStyle);
   let pill: HTMLElement | null = null;
-  const testable = () => markersOf(id).filter(m => m.text && !m.detachedAt && document.querySelector(`#editor .mk[data-marker="${CSS.escape(m.id)}"]`));
+  const testable = () => markersOf(id).filter(m => m.text && !m.detachedAt && !m.closedAt && document.querySelector(`#editor .mk[data-marker="${CSS.escape(m.id)}"]`));
   let known = 0;
   function paintTest() {
     testStyle.textContent = [...shown].map(x => `.paper.testing .mk[data-marker="${CSS.escape(x)}"]{color:inherit;background:color-mix(in srgb,var(--tc,var(--mark)) 18%,transparent);box-shadow:none}`).join("");
@@ -692,7 +702,7 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
       let y = p.getBoundingClientRect().top - wrapTop;
       if (y < lastY + 14) y = lastY + 14;
       lastY = y;
-      return `<button class="rdot" data-id="${m.id}" data-type="${m.type}" data-mastery="${m.mastery}" style="top:${y}px" title="${esc(TYPE_INFO[m.type].label)}${m.text ? ": " + esc(m.text.slice(0, 60)) : ""}" aria-label="Open ${esc(TYPE_INFO[m.type].label)} marker"></button>`;
+      return `<button class="rdot${m.closedAt ? " closed" : ""}" data-id="${m.id}" data-type="${m.type}" data-mastery="${m.mastery}" style="top:${y}px" title="${esc(TYPE_INFO[m.type].label)}${m.text ? ": " + esc(m.text.slice(0, 60)) : ""}" aria-label="Open ${esc(TYPE_INFO[m.type].label)} marker"></button>`;
     }).join("");
     // suggestions sit on the same rail as dashed dots, kept clear of the real ones
     const taken = pins.map(p => p.getBoundingClientRect().top - wrapTop);
@@ -714,8 +724,8 @@ export function renderNote(stage: HTMLElement, id: string, goHome: () => void, o
     // Test me starts from the menu; the header only shows it while a test is running, as the way out
     if (tb) tb.hidden = !testing;
     const ts = $("#testStart");
-    if (ts) ts.hidden = testing || !ms.some(m => m.text && !m.detachedAt);
-    $("#moreBtn")?.classList.toggle("has-due", ms.some(m => !m.detachedAt && !m.recallOff && m.due <= Date.now()));
+    if (ts) ts.hidden = testing || !ms.some(m => m.text && !m.detachedAt && !m.closedAt);
+    $("#moreBtn")?.classList.toggle("has-due", ms.some(m => !m.detachedAt && !m.closedAt && !m.recallOff && m.due <= Date.now()));
     const hint0 = $("#hint");
     if (hint0) hint0.hidden = ms.length > 0; // the how-to line is for a note with no markers yet
     if (testing) paintTest();

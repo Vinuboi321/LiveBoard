@@ -59,7 +59,7 @@ export function bindNoteMenu(btn: HTMLElement, menu: HTMLElement, getNote: () =>
     const heads = [...(editorEl()?.querySelectorAll<HTMLElement>("h1, h2, h3") || [])].filter(h => h.textContent?.trim());
     const words = (editorEl()?.innerText.trim().match(/\S+/g) || []).length;
     const dyn = menu.querySelector<HTMLElement>("#noteMenuDyn") || menu, top = menu.querySelector<HTMLElement>("#noteMenuTop");
-    const n0 = getNote(), mk = n0 ? markersOf(n0.id).filter(m => !m.detachedAt) : [], due = mk.filter(m => !m.recallOff && m.due <= Date.now()).length;
+    const n0 = getNote(), mk = n0 ? markersOf(n0.id).filter(m => !m.detachedAt) : [], due = mk.filter(m => !m.recallOff && !m.closedAt && m.due <= Date.now()).length;
     // which heading you're reading now: the last one above the middle of the screen
     const here = heads.reduce((k, h, i) => (h.getBoundingClientRect().top < innerHeight * 0.45 ? i : k), -1);
     if (top) top.innerHTML = `<div class="nmstats"><span><b>${words.toLocaleString()}</b>word${words === 1 ? "" : "s"}</span><span><b>${Math.max(1, Math.round(words / 220))}</b>min read</span><span><b>${mk.length}</b>marker${mk.length === 1 ? "" : "s"}</span><span class="${due ? "due" : ""}"><b>${due}</b>due</span></div>`;
@@ -96,7 +96,7 @@ export function bindNoteMenu(btn: HTMLElement, menu: HTMLElement, getNote: () =>
   const place = () => {
     const wrap = btn.parentElement!.getBoundingClientRect(), b = btn.getBoundingClientRect(), vw = document.documentElement.clientWidth, vh = Math.round(visualViewport?.height || innerHeight);
     const w = Math.min(340, vw - 16);
-    const left = Math.max(8, Math.min(vw - w - 8, b.right - w));
+    const left = Math.max(8, Math.min(vw - w - 8, b.left)); // hangs from the button's left edge, pulled back in if it would run off the right
     menu.style.width = w + "px";
     menu.style.left = left - wrap.left + "px"; menu.style.right = "auto";
     menu.style.top = b.bottom - wrap.top + 10 + "px";

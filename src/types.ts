@@ -64,6 +64,7 @@ export interface Marker {
   outputs?: Record<string, { at: number; text: string; html: string }[]>; // revision history of what this marker wrote into the note, by output id
   remindAt?: number | null;
   detachedAt?: number | null; // its passage or point was removed from the note; the marker's thinking is kept
+  closedAt?: number | null; // closed out: finished with, out of recall and off the home page, kept in the learning map as a milestone
   createdAt: number;
   updatedAt: number;
   rev?: number; // server revision this copy is based on

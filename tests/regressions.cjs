@@ -369,7 +369,9 @@ const BASE = process.env.BASE || "http://localhost:4173";
   ok((await p.$$("#editor img")).length === 1 && !(await p.$("#editor img:not([src^='data:image/'])")), "pasting a web page keeps its words but never an image that loads from the web");
 
   // The note header: three tools on the page, everything else in the menu, which always opens fully on screen.
-  ok((await p.$$(".big3 > .b3, .big3 .orb")).length === 3 && !(await p.isVisible("#delNote")), "the header shows Marker, Format and Menu; Delete lives in the menu");
+  ok((await p.$$(".big3 > .b3")).length === 2 && /Return to dial/.test((await p.textContent("#backBtn")).replace(/\u00a0/g, " ")) && (await p.$$("#moreBtn .bars u")).length === 3 && !(await p.isVisible("#delNote")), "the header has Return to dial and a three-bar Menu on the left, Marker and Format on the right; Delete lives in the menu");
+  const aa = await p.evaluate(() => { const r = document.createRange(), b = document.querySelector("#toolsBtn b"), sp = document.querySelector("#toolsBtn span"); const base = el => { r.selectNodeContents(el); const rc = r.getBoundingClientRect(), fs = parseFloat(getComputedStyle(el).fontSize); return rc.bottom - (rc.height - fs) / 2; }; return Math.abs(base(b) - base(sp)); });
+  ok(aa < 2.5, `"Aa" and "Format" sit on one line (${aa.toFixed(1)}px apart)`);
   for (const w of [1280, 700, 520, 380]) {
     await p.setViewportSize({ width: w, height: 760 });
     const orbAt = await p.evaluate(() => Math.round(document.querySelector("#moreBtn").getBoundingClientRect().left));
@@ -389,6 +391,32 @@ const BASE = process.env.BASE || "http://localhost:4173";
   ok((await p.textContent("#delNote")) === "Delete note", "tapping anywhere else cancels the delete");
   await p.click("#delNote"); await p.keyboard.press("Escape");
   ok(await p.evaluate(() => document.querySelector("#delNote").textContent === "Delete note") && !!(await p.$("#ptitle")), "Escape cancels it too, and the note is still there");
+
+  // A marker's status is changed from its head, and a finished marker can be closed out instead of deleted.
+  await p.goto(BASE); await p.waitForSelector(".hbtn[data-act='blank']"); await p.waitForTimeout(2200);
+  await p.click(".hbtn[data-act='blank']"); await p.waitForSelector("#ptitle");
+  await p.fill("#ptitle", "Closing note");
+  await p.click("#editor .ProseMirror"); await p.keyboard.type("The four phases are prophase, metaphase, anaphase and quokkaphase.");
+  await p.keyboard.down("Shift"); for (let i = 0; i < 30; i++) await p.keyboard.press("ArrowLeft"); await p.keyboard.up("Shift");
+  await p.click(".floatbtn.place"); await p.waitForSelector(".mws");
+  await p.click("#mMast"); await p.click('.mastpick [data-mast="1"]');
+  await p.waitForSelector('#mMast[data-mastery="1"]');
+  ok(/Getting it/.test(await p.textContent("#mMast")) && (await p.getAttribute("#editor .pin", "data-mastery")) === "1", "the status chip at the top of a marker changes how well you know it");
+  await p.click("#mFinish");
+  await p.waitForSelector(".mws", { state: "detached" });
+  ok(await p.evaluate(() => document.querySelector("#editor .pin").classList.contains("closed")), "closing a marker out leaves it on the page, quietly");
+  await p.click("#backBtn"); await p.waitForSelector("#dial");
+  ok(!/quokkaphase/.test(await p.textContent("#follow .fcards").catch(() => "")), "a closed-out marker leaves the home page's cards");
+  await p.waitForTimeout(600);
+  if (await p.$("#mapOpen")) {
+    await p.click("#mapOpen"); await p.waitForSelector("#mapView .mdone button");
+    ok((await p.$$("#skyBig .star.closed")).length === 1 && /quokkaphase/.test(await p.textContent(".mdone")), "it is kept in the learning map as a milestone");
+    await p.click(".mdone button"); await p.waitForSelector(".mws #mReopen");
+    await p.click("#mReopen");
+    await p.waitForFunction(() => !document.querySelector("#editor .pin.closed"));
+    ok(!(await p.$(".closedout")) && !!(await p.$("#mFinish")), "a closed-out marker can be reopened from the map");
+    await p.keyboard.press("Escape");
+  }
 
   await b.close();
   console.log(errs.length ? "\nFAILURES:\n" + errs.join("\n") : "\nALL REGRESSIONS PASS");

@@ -145,7 +145,7 @@ const closePop = () => { if (pop) setPop(null); };
 function renderFollow() {
   const el = $("#follow");
   if (!el) return;
-  const all = liveMarkers();
+  const all = liveMarkers().filter(m => !m.closedAt); // closed-out markers live in the map, not on the home page
   const recent = [...all].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6);
   if (!recent.length) {
     el.innerHTML = `<div class="followhead"><h2>Follow a thought.</h2></div><p class="followempty">Markers you place show up here, so you can pick a thought back up from anywhere.</p>`;

@@ -15,6 +15,8 @@ Updated November 11, 2026. Teacher-side work is outside this scope.
 
 - Pictures in notes (paste, drop or pick; shrunk on device, stored inline, never fetched from the web), an elastic spring-driven marker resize, study sessions with an exit ticket, and a note outline with print and Markdown export.
 
+- Markers can be closed out (kept in the learning map as milestones, out of recall) and reopened; status is set from the marker's head. `closedAt` is a new optional field on markers: older app versions ignore it, and the teacher side should treat a closed marker as finished, not deleted.
+
 ## Milestones and remaining gates
 
 | Milestone | State | Still needed |

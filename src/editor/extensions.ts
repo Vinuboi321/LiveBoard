@@ -20,6 +20,7 @@ export function paintPin(el: HTMLElement) {
   const id = el.dataset.pin || el.dataset.marker;
   const m = id ? state.markers.get(id) : undefined;
   el.dataset.type = m?.type || "note";
+  el.classList.toggle("closed", !!m?.closedAt); // closed out: stays on the page, quietly
   const was = el.dataset.mastery, now = String(m?.mastery ?? 0);
   el.dataset.mastery = now;
   // a small flash the moment a marker becomes mastered

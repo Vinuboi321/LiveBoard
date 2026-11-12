@@ -53,6 +53,7 @@ function burst(from: Element | null | undefined) {
 let aiOn: boolean | null = null;
 let pendingOpen: string | null = null;
 let lastCalc = "";
+let mastOpen = false; // the head's status chip is showing its three choices
 let reopenTab: Tab | null = null; // shown at the top of the Calculate tab after a run
 let openNoteFn: (id: string) => void = () => {};
 export const setOpenNote = (fn: (id: string) => void) => { openNoteFn = fn; };
@@ -240,6 +241,7 @@ function render() {
   // what was showing before this draw: which tab (so the underline can slide and the panel can come in from that side)
   // and how much was saved (so only a new item animates in)
   const same = ws.dataset.mid === m.id;
+  if (!same) mastOpen = false;
   const was = same ? ws.querySelector<HTMLElement>('.wstabs [aria-selected="true"]') : null;
   const from = was ? { tab: was.dataset.tab as Tab, left: was.offsetLeft, width: was.offsetWidth } : null;
   const grew = same && m.thread.length > Number(ws.dataset.tl || 0);
@@ -259,12 +261,16 @@ function render() {
       ${m.detachedAt ? `<div class="detached" role="status"><b>Source removed.</b> The ${m.text ? "passage" : "point"} this marker sat on was deleted from the note. Everything in the marker is kept.<div class="wsrow"><button class="btn2" id="mReattach">Put back at the end of the note</button><button class="textlink danger" id="mForget">Delete marker</button></div></div>` : ""}
       ${m.text ? `<blockquote>${esc(m.text)}</blockquote>` : `<blockquote class="blank">${isFree(m.id) ? "A free point on your page." : "A blank point in your note."} Write, draft or generate here.</blockquote>`}
       <div class="wsmeta"><span>Anchored in ${esc(n?.title || "this note")}</span><span>${esc(courseName(n?.courseId))}</span><span>Placed ${agoLong(m.createdAt)}</span></div>
-      <div class="wschips"><span class="chipm" data-mastery="${m.mastery}"><i></i>${MASTERY[m.mastery]}</span>${m.recallOff ? `<span class="chipm off">Not in recall</span>` : `<span class="chipm">Review ${m.due <= Date.now() ? "due now" : new Date(m.due).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>`}${linkCount ? `<span class="chipm">${linkCount} link${linkCount > 1 ? "s" : ""}</span>` : ""}</div>
+      ${m.closedAt ? `<div class="closedout" role="status"><i aria-hidden="true">✓</i><span><b>Closed out ${new Date(m.closedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}.</b> Out of recall and off your home page, kept in your learning map.</span><button class="btn2" id="mReopen">Reopen</button></div>` : ""}
+      <div class="wschips">${mastOpen
+        ? `<span class="mastpick" role="radiogroup" aria-label="How well you know this">${MASTERY.map((l, i) => `<button role="radio" data-mast="${i}" data-mastery="${i}" aria-checked="${i === m.mastery}"><i></i>${l}</button>`).join("")}</span>`
+        : `<button class="chipm status" id="mMast" data-mastery="${m.mastery}" aria-haspopup="true" aria-expanded="false" title="Change how well you know this"><i></i>${MASTERY[m.mastery]}<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 4.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`}${m.recallOff ? `<span class="chipm off">Not in recall</span>` : `<span class="chipm">Review ${m.due <= Date.now() ? "due now" : new Date(m.due).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>`}${linkCount ? `<span class="chipm">${linkCount} link${linkCount > 1 ? "s" : ""}</span>` : ""}</div>
     </div>
     <nav class="wstabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${l}</button>`).join("")}</nav>
     <div class="wsbody" id="wsBody" role="tabpanel">${body()}</div>
     <div class="wsfoot">
       <span class="saved"><i></i>Autosaved with this note</span>
+      ${m.closedAt ? "" : `<button class="finish" id="mFinish" title="Done with this marker? Close it out: it leaves recall and your home page, and stays in your learning map as a milestone."><i aria-hidden="true">✓</i>Close out</button>`}
       <button class="more" id="mMore" aria-label="More marker options" aria-expanded="false">•••</button>
       <div class="moremenu" id="mMenu" hidden>
         <div class="mmlabel">Marker type</div>
@@ -309,6 +315,23 @@ function bindCommon() {
   more.onclick = () => { menu.hidden = !menu.hidden; more.setAttribute("aria-expanded", String(!menu.hidden)); };
   menu.querySelectorAll<HTMLButtonElement>("[data-t]").forEach(b => b.onclick = () => update({ type: b.dataset.t as MarkerType }));
   const id = current.id;
+  // the status chip in the head: tap it, pick one of the three, done
+  const mast = $("#mMast", ws);
+  if (mast) mast.onclick = () => { mastOpen = true; render(); ws?.querySelector<HTMLElement>('.mastpick [aria-checked="true"]')?.focus(); };
+  ws.querySelectorAll<HTMLButtonElement>(".mastpick [data-mast]").forEach(b => {
+    b.onclick = () => { const v = Number(b.dataset.mast) as Mastery, was = current?.mastery; mastOpen = false; if (v === 2 && was !== 2) burst(b); if (v === was) render(); else update({ mastery: v }); };
+    b.onkeydown = e => { if (e.key === "Escape") { e.stopPropagation(); mastOpen = false; render(); ws?.querySelector<HTMLElement>("#mMast")?.focus(); } };
+  });
+  // closing out: for a marker you're finished with but don't want to lose
+  const fin = $("#mFinish", ws);
+  if (fin) fin.onclick = async () => {
+    burst(fin);
+    await update({ closedAt: Date.now() });
+    toast("Closed out. It's kept in your learning map.");
+    setTimeout(() => { if (current?.id === id) closeBox(); }, 650);
+  };
+  const reopen = $("#mReopen", ws);
+  if (reopen) reopen.onclick = async () => { await update({ closedAt: null }); toast("Reopened. It's back in recall."); };
   armButton($("#mDel", ws)!, "Remove marker", "Tap again to remove", async () => {
     closeBox();
     removeMarkerFromDoc(id);

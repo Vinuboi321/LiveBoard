@@ -19,6 +19,7 @@ export function openMap(opts: { from: HTMLElement | null; openMarker: (id: strin
   const all = liveMarkers().filter(m => !m.detachedAt);
   const counts = [0, 0, 0];
   all.forEach(m => counts[m.mastery]++);
+  const closed = all.filter(m => m.closedAt).sort((a, b) => (b.closedAt || 0) - (a.closedAt || 0));
   const pct = all.length ? Math.round(100 * (counts[1] * 0.5 + counts[2]) / all.length) : 0;
   const due = all.filter(m => isDue(m) && recallable(m)).length;
   const week = all.filter(m => m.createdAt > Date.now() - 7 * DAY).length;
@@ -53,6 +54,8 @@ export function openMap(opts: { from: HTMLElement | null; openMarker: (id: strin
         <div class="mcourses">${rows.map(([cid, r]) => `<button class="mcourse" data-c="${esc(cid)}" style="--c:${courseColor(cid)}" aria-pressed="false" title="Show only ${esc(courseName(cid))} on the map">
             <span class="mcn"><i></i>${esc(courseName(cid))}</span><span class="mcc">${r.n}${r.due ? ` · <em>${r.due} due</em>` : ""}</span>
             <span class="mbar">${r.c.map((v, i) => (v ? `<u data-mastery="${i}" style="flex:${v}"></u>` : "")).join("")}</span></button>`).join("")}</div>
+        ${closed.length ? `<h3>Closed out · ${closed.length} milestone${closed.length === 1 ? "" : "s"}</h3>
+        <div class="mdone">${closed.slice(0, 6).map(m => `<button data-m="${m.id}" title="Open this marker"><i aria-hidden="true">✓</i><span>${esc((m.text || m.recallQ || note(m.noteId)?.title || "Marker").slice(0, 60))}</span><small>${new Date(m.closedAt!).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small></button>`).join("")}${closed.length > 6 ? `<p>and ${closed.length - 6} more on the map</p>` : ""}</div>` : ""}
         <div class="mstats"><div><b>${opts.streak}</b><small>day streak</small></div><div><b>${week}</b><small>marked this week</small></div><div><b>${ahead}</b><small>due in 7 days</small></div></div>
       </aside></div>`;
   document.body.appendChild(el);
@@ -60,6 +63,7 @@ export function openMap(opts: { from: HTMLElement | null; openMarker: (id: strin
   const pick = (id: string) => { closeMap(true); opts.openMarker(id); };
   const sky = $("#skyBig", el)!;
   renderSky(sky, pick, { tall: true });
+  el.querySelectorAll<HTMLButtonElement>(".mdone [data-m]").forEach(b => b.onclick = () => pick(b.dataset.m!));
 
   // tap a course to see only its part of the sky; tap again for everything
   el.querySelectorAll<HTMLButtonElement>(".mcourse").forEach(b => b.onclick = () => {
