@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-all.cjs",
     "test:api": "node tests/api.cjs",
-    "test:sql": "bash tests/sql/run.sh"
+    "test:sql": "bash tests/sql/run.sh",
+    "predev": "node scripts/prepare-ocr.mjs",
+    "prebuild": "node scripts/prepare-ocr.mjs",
+    "prebuild:synctest": "node scripts/prepare-ocr.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.118.0",
@@ -25,9 +28,12 @@
     "marked": "^14.1.4",
     "mathjs": "15.2.0",
     "mermaid": "11.17.2",
-    "pdfjs-dist": "^4.8.69"
+    "pdfjs-dist": "^4.8.69",
+    "tesseract.js": "^6.0.1"
   },
   "devDependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "@types/node": "^22.20.5",
     "playwright": "1.63.0",
     "typescript": "5.6.3",
     "vite": "6.4.5",

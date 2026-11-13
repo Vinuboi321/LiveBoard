@@ -7,3 +7,8 @@ dist
 tests/shots
 dist-artifact
 dist-synctest
+
+# Generated OCR runtime; rebuilt from package-lock.json by predev/prebuild.
+public/ocr/*.js
+public/ocr/*.wasm
+public/ocr/*.gz

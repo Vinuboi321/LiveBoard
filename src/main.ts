@@ -11,11 +11,26 @@ import { ensureStarterCourse, liveCourses, liveNotes, markersOf, newNote, note, 
 import { bootOwner, claimSignedOutNotes, initSync, migrateLegacyShared, push, signedOutNotes } from "./sync";
 import { $, debounce, esc, reducedMotion, toast } from "./util";
 import { newMarker } from "./store";
+import { renderTeacher } from "./teacher/workspace";
 
 const stage = () => $("#stage")!;
 let currentNote: string | null = null;
+let closeTeacher: (() => void) | null = null;
+let routeRevision = 0;
 
-function route() {
+async function route() {
+  const revision = ++routeRevision;
+  closeTeacher?.(); closeTeacher = null;
+  const teacher = location.hash === "#teacher";
+  document.querySelector('#teacherLink')?.setAttribute('aria-current', teacher ? 'page' : 'false');
+  if (teacher) {
+    destroyHome();
+    await leaveNote();
+    if (revision !== routeRevision) return;
+    stage().scrollTop = 0;
+    closeTeacher = renderTeacher(stage());
+    return;
+  }
   const m = location.hash.match(/^#note-([\w-]+)/);
   if (m) showNote(m[1]);
   else showHome();
