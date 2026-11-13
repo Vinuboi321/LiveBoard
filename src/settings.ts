@@ -34,14 +34,8 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   const user = currentUser();
   const courses = liveCourses();
   $("#sBody", panel)!.innerHTML = `
-    <section id="account"><h3>LiveBoard login</h3>
-      <div class="seg" role="radiogroup" aria-label="Classroom role">
-        <button role="radio" aria-checked="true" data-login-role="student">Student</button>
-        <button role="radio" aria-checked="false" data-login-role="teacher">Teacher</button>
-      </div>
-      <p class="muted" id="loginRoleHint">Sign in to sync notes, or join a discussion with your teacher’s code.</p>
-      <a class="btn small classroom-link" id="studentDiscussion" href="${esc(classroomUrl("student"))}">Join discussion</a>
-      ${user ? `<a class="btn primary classroom-link" id="teacherPresentation" href="${esc(classroomUrl("teacher"))}" hidden>Open teacher presentation</a>` : ""}
+    <section id="account"><h3>Account</h3>
+      <p class="muted classroom-row">In class: <a class="classroom-link" id="studentDiscussion" href="${esc(classroomUrl("student"))}">Join a live lesson</a> with your teacher's code, or <a class="classroom-link" id="teacherPresentation" href="${esc(classroomUrl("teacher"))}">teach with your slides</a>.</p>
       ${!syncConfigured() ? `<p class="muted">Sync isn't set up on this server, so notes are saved on this device only. Export a backup below to move them.</p>`
         : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.${pendingCount() ? ` <span class="muted">${pendingCount()} change${pendingCount() === 1 ? "" : "s"} waiting to upload.</span>` : ""}</p>
           <div class="row"><button class="btn" id="sOut">Sign out</button><button class="btn" id="sOutRemove" title="Also delete this account's notes from this device once they're uploaded">Sign out and remove from this device</button></div>
@@ -74,24 +68,6 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       ${user ? `<button class="btn danger" id="sDelServer">Delete my account data</button><p class="muted small">Deletes everything this account stored online and the copy on this device, including changes that haven't uploaded. Download a backup first if you want to keep anything. Other devices signed in to this account keep their own copies but can no longer upload them.</p>` : ""}
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
-
-  const roleButtons = panel.querySelectorAll<HTMLButtonElement>("[data-login-role]");
-  let loginRole = localStorage.getItem("liveboard-login-role") === "teacher" ? "teacher" : "student";
-  const updateRole = () => {
-    for (const button of roleButtons) button.setAttribute("aria-checked", String(button.dataset.loginRole === loginRole));
-    $("#studentDiscussion", panel!)!.hidden = loginRole !== "student";
-    const presentation = $("#teacherPresentation", panel!);
-    if (presentation) presentation.hidden = loginRole !== "teacher";
-    $("#loginRoleHint", panel!)!.textContent = loginRole === "teacher"
-      ? "Sign in to open your teacher presentation and host a discussion."
-      : "Sign in to sync notes, or join a discussion with your teacher’s code.";
-  };
-  for (const button of roleButtons) button.onclick = () => {
-    loginRole = button.dataset.loginRole === "teacher" ? "teacher" : "student";
-    localStorage.setItem("liveboard-login-role", loginRole);
-    updateRole();
-  };
-  updateRole();
   panel.querySelectorAll<HTMLButtonElement>("[data-export]").forEach(b => b.onclick = () => ($("#sExport", panel!) as HTMLButtonElement | null)?.click());
   panel.querySelectorAll<HTMLElement>("[data-theme-pick]").forEach(b => b.onclick = () => {
     setTheme(b.dataset.themePick as ThemeChoice);

@@ -108,3 +108,72 @@ body{background:radial-gradient(ellipse at 12% 5%,#8338EC22,transparent 45%),rad
 .slide-content.imported-content{padding:0;background:#121023}
 .imported-content > :not(.slide-upload){display:none}
 .imported-content .slide-upload{width:100%;height:100%;max-width:none;max-height:none;margin:0;object-fit:contain}
+
+/* ---------- Presentations (the teacher's home), slides viewer and class review ---------- */
+.library-brand{font-size:19px;display:inline-flex;align-items:center;gap:8px;color:var(--ink)}
+.library-header{align-items:flex-end}.library-header h1{margin:14px 0 4px}
+.library-stats{margin:0;color:var(--muted);font-size:14px}
+.library-filters{align-items:end}.library-filters label{flex:0 1 170px}.library-filters .library-search{flex:2 1 260px}
+.library-search input{width:100%}
+.deck-grid{grid-template-columns:repeat(auto-fill,minmax(262px,1fr));gap:18px}
+.deck-grid li{border-radius:16px;overflow:visible;display:flex;flex-direction:column;transition:transform .18s ease,box-shadow .18s ease,border-color .18s}
+.deck-cover{height:auto;aspect-ratio:1.6;padding:0;display:block;border-radius:15px 15px 0 0;background:var(--desk);cursor:pointer}
+.deck-cover .deck-count,.deck-cover .deck-example{position:absolute;bottom:10px;left:10px;background:color-mix(in srgb,var(--paper) 92%,transparent);color:var(--ink);font:600 11px/1 system-ui;border:1px solid var(--line);border-radius:99px;padding:5px 9px}
+.deck-cover .deck-example{left:auto;right:10px;color:var(--cobalt);border-color:color-mix(in srgb,var(--cobalt) 45%,var(--line))}
+.slide-thumb{position:absolute;inset:0;overflow:hidden;--k:.27}
+.slide-thumb-inner{position:absolute;left:0;top:0;width:1000px;aspect-ratio:1.6;transform:scale(var(--k));transform-origin:0 0;border:0!important;border-radius:0!important;box-shadow:none!important;pointer-events:none}
+.slide-thumb-inner .slide-content{height:100%}
+.deck-details{display:flex;flex-direction:column;gap:8px;flex:1;padding:14px 16px 16px}.deck-details h2{font-size:18px;line-height:1.25}.deck-details h2 a{color:inherit;text-decoration:none}.deck-details p{margin:0;font-size:13px}
+.deck-session{text-align:left;border:1px solid color-mix(in srgb,var(--student-marker) 40%,var(--line));background:color-mix(in srgb,var(--student-marker) 8%,var(--paper));border-radius:10px;padding:8px 11px;font-size:13px;color:var(--ink);cursor:pointer}
+.deck-session em{font-style:normal;color:var(--teacher-marker);font-weight:600}.deck-session small{display:block;color:var(--muted);margin-top:2px}
+.deck-actions{margin-top:auto;padding-top:4px;gap:8px}
+.deck-actions .deck-open{background:var(--cobalt);color:var(--oncobalt);border-radius:99px;padding:6px 16px;font-weight:600;text-decoration:none;font-size:14px}
+.deck-actions button{border-radius:99px;padding:6px 13px;font-size:14px;background:var(--paper);color:var(--ink);cursor:pointer}
+.deck-menu{position:relative;margin-left:auto}.deck-menu>button{letter-spacing:1px;color:var(--muted)}
+.deck-menu-list{position:absolute;right:0;bottom:calc(100% + 6px);z-index:5;display:flex;flex-direction:column;min-width:172px;padding:6px;background:var(--paper);border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px #0a082040}
+.deck-menu-list button{border:0!important;border-radius:8px!important;text-align:left;padding:8px 10px!important;white-space:nowrap}
+.library-examples{color:var(--muted);font-size:13px;margin-top:26px}.library-examples button{color:var(--cobalt);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+@media (hover:hover){.deck-grid li:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--cobalt) 45%,var(--line));box-shadow:0 16px 36px -18px #0a082070}.deck-menu-list button:hover{background:var(--desk)}.deck-actions button:hover,.deck-session:hover{border-color:var(--cobalt)}}
+
+.modal.slides-viewer{width:min(1060px,100%);height:min(860px,92vh);max-height:none;padding:0;overflow:hidden;display:flex;flex-direction:column}
+.viewer-head{display:flex;align-items:center;gap:16px;padding:18px 62px 16px 26px;border-bottom:1px solid var(--line)}.viewer-head>div{flex:1;min-width:0}
+.viewer-head h2{margin:4px 0 0;font-size:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.viewer-head .primary{text-decoration:none;white-space:nowrap;padding:9px 16px}
+.viewer-count{font:600 13px ui-monospace,monospace;color:var(--muted);white-space:nowrap}
+.viewer-body{flex:1;min-height:0;display:grid;grid-template-columns:54px minmax(0,1fr)}
+.viewer-rail{display:flex;flex-direction:column;align-items:center;gap:5px;padding:16px 0;overflow-y:auto;border-right:1px solid var(--line);scrollbar-width:none}
+.viewer-rail button{position:relative;width:32px;height:32px;flex:0 0 auto;border-radius:9px;font:600 12px ui-monospace,monospace;color:var(--muted);cursor:pointer;transition:background .2s,color .2s}
+.viewer-rail button[aria-current=true]{background:var(--cobalt);color:var(--oncobalt)}
+.viewer-rail button i{position:absolute;right:2px;top:2px;width:7px;height:7px;border-radius:50%;background:var(--student-marker)}
+.viewer-scroll{overflow-y:auto;padding:18px 26px 40px;outline:0;overscroll-behavior:contain}
+.viewer-scroll article{margin:0 auto 26px;max-width:900px;opacity:.55;transform:scale(.985);transition:opacity .45s ease,transform .45s ease}
+.viewer-scroll article.on{opacity:1;transform:none}
+.viewer-scroll .slide-canvas{aspect-ratio:1.6}.viewer-scroll .slide-content h2{white-space:pre-line}
+.viewer-notes{margin:10px 2px 0;font-size:13px;color:var(--muted);line-height:1.5}.viewer-notes b{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px}
+.viewer-end{text-align:center;color:var(--muted);font-size:13px;padding:10px 0 0}.viewer-end a{color:var(--cobalt)}
+@media (prefers-reduced-motion:reduce){.viewer-scroll article{transition:none;transform:none}.deck-grid li{transition:none}}
+@media (max-width:700px){.viewer-body{grid-template-columns:1fr}.viewer-rail{display:none}.viewer-head{flex-wrap:wrap;padding:14px 54px 12px 16px}.viewer-scroll{padding:12px}.library-header{flex-direction:column;align-items:flex-start}}
+
+.modal.class-review{width:min(720px,100%)}
+.review-sum{color:var(--muted);margin:6px 0 16px}.review-sum b{color:var(--ink)}
+.review-bars{display:flex;align-items:flex-end;gap:5px;height:92px;padding:8px 10px 0;background:var(--desk);border:1px solid var(--line);border-radius:12px;overflow-x:auto}
+.review-bars div{flex:1 0 16px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px}
+.review-bars i{width:100%;max-width:34px;min-height:2px;border-radius:5px 5px 0 0;background:var(--student-marker)}.review-bars span{font:10px ui-monospace,monospace;color:var(--muted);padding-bottom:4px}
+.review-list{margin:16px 0;display:flex;flex-direction:column;gap:14px}
+.review-list h3{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin:0 0 6px}.review-list h3 a{color:var(--ink);text-decoration:none}.review-list h3 span{color:var(--muted);font-weight:500}
+.review-q{border-left:3px solid var(--teacher-marker);background:var(--desk);border-radius:6px;padding:9px 13px;margin-bottom:6px}.review-q.done{border-left-color:var(--good)}
+.review-q p{margin:0;color:var(--ink)}.review-q small{color:var(--muted)}.review-q blockquote{margin:6px 0 0;padding-left:10px;border-left:2px solid var(--line);font-size:13px;color:var(--muted)}
+
+/* ---------- Editor: the way home, and counts on the rail ---------- */
+a.brand{text-decoration:none;color:inherit}
+.crumb{color:inherit;text-decoration:none;border-bottom:1px solid transparent}@media (hover:hover){.crumb:hover{color:var(--cobalt);border-bottom-color:currentColor}}
+.slide-rail h3{overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.thumb-count{position:absolute;right:0;bottom:5px;min-width:17px;height:17px;padding:0 4px;display:grid;place-items:center;border-radius:99px;background:var(--student-marker);color:#06222b;font:700 10px/1 system-ui;font-style:normal}
+.lesson-actions{flex-wrap:wrap;justify-content:flex-end}
+
+/* ---------- Joining: one card, nothing to fiddle with while waiting ---------- */
+.waiting-room{display:block;max-width:460px;padding:28px 22px}.waiting-room .join-card{padding-top:8vh}
+.waiting-room .join-card form{display:flex;flex-direction:column;gap:6px}.waiting-room .join-card .primary{margin-top:10px}
+.viewer-scroll{position:relative}
+
+/* a toast reads on either theme: the ink colour as its ground, the desk colour as its text */
+.toast{background:var(--ink);color:var(--desk)}.toast button{color:inherit}

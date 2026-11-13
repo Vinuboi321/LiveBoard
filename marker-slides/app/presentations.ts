@@ -5,6 +5,11 @@ export type SampleMarker = {
   author:string; body:string; response:string; resolved:number; created:number;
 };
 
+/** What a live class left behind: the questions students placed on the slides, kept with the deck in this browser so
+ *  the teacher can see where the class got stuck. Text only: no screenshots and no student ids. */
+export type SessionQuestion = { slide:number; kind:string; author:string; body:string; resolved:number; replies:string[] };
+export type Session = { room:string; at:number; total:number; open:number; bySlide:number[]; questions:SessionQuestion[] };
+
 export type Presentation = {
   id: string;
   title: string;
@@ -14,6 +19,7 @@ export type Presentation = {
   topic: string;
   updated: number;
   sampleMarkers?: SampleMarker[];
+  lastSession?: Session;
 };
 
 function openLibrary(): Promise<IDBDatabase> {

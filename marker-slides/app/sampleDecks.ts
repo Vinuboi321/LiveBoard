@@ -95,8 +95,9 @@ const examples: Example[] = [
     'Both can use values and reasons. Classmates can join a petition or report where they need a station. The principal can authorize a facilities review, so emphasize placement, cost, and access.'],
 ];
 
-export const sampleDecks:Presentation[]=examples.map(([className,unit,topic,title,concept,example,task,question,response],index)=>{
-  const id='sample-classroom-'+index;
+/* One example per subject is enough to show how a lesson reads; a wall of fifteen made a new teacher's own decks hard to find. */
+export const sampleDecks:Presentation[]=examples.filter((_,index)=>index%5===0).map(([className,unit,topic,title,concept,example,task,question,response],index)=>{
+  const id='sample-classroom-'+index*5;
   return {
     id,title,className,unit,topic,updated:0,
     slides:[

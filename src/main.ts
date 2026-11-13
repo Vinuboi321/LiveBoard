@@ -169,7 +169,6 @@ async function boot() {
   const updateJoin = () => { join.href = classroomUrl("student"); };
   updateJoin();
   onTheme(updateJoin);
-  $("#classroomLogin")!.onclick = () => openSettings("account", refresh);
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
   // a study session ends with a quiz, on the dial, of exactly what was marked during it
   initSession({ exitTicket: ids => { queueRecall(ids, "Exit ticket"); if (location.hash.startsWith("#note-")) goHome(); } });

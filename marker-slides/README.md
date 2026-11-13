@@ -1,18 +1,32 @@
 # LiveBoard Marker Slides
 
-A standalone classroom slideshow application under `marker-slides/`. Teachers manage lessons and a private marker queue. Students join by code, draw while waiting, and place point or screenshot-region markers. A separate projector window follows the teacher's current slide. Teachers' markers are gold and students' own markers are cyan.
+The teacher side of LiveBoard: a classroom slideshow under `marker-slides/`. A teacher keeps presentations, teaches one live, and students join by code and drop markers on the exact spot of a slide they want explained. A separate projector window follows the teacher's current slide. Teachers' markers are gold and a student's own markers are cyan; a student never sees another student's markers.
 
-The original LiveBoard header includes **Log in** for the Student and Teacher account flows and a compact **Join** link for discussion codes. Configure `VITE_LIVEBOARD_SLIDES_URL` in the original app to point at your slideshow deployment. LiveBoard passes its current light or dark palette to the classroom, and the classroom keeps that palette in student and projector links. Student and Teacher are entry modes for the existing email sign-in. Live-room hosting controls still require the room's host capability.
+Markers mean here what they mean in the notes app: a point or a region on the material, with the thinking attached to that place. In class they carry a student's question and the teacher's answer.
 
-## Presentation library and imports
+## What each screen is for
 
-The home icon in the teacher editor opens a browser-local presentation library. Filter or sort by class, unit, and topic, preview decks, or copy and delete saved decks. The library includes five example decks each for AP Chemistry, AP Calculus AB, and English.
+**Presentations (the teacher's home).** Every deck in this browser, with its first slide as the cover. Search covers title, class, unit and topic; the class, unit and topic filters appear only once those labels are in use. Each card opens the deck, shows its slides, and keeps Title and class, Duplicate, Save as a file and Delete in one menu. A new browser starts with three example decks (one per subject), which can be removed in one click.
 
-Use **Import files** to create a deck from one PDF, a LiveBoard JSON export, or multiple PNG, JPEG, or WebP images. PDF pages and images become full-slide backgrounds that support point and region markers. Import up to 40 slides. For PowerPoint and Google Slides, export to PDF first.
+**Slides viewer.** Clicking a cover shows the whole deck as one column to read through. The wheel is deliberately slow and eased, arrow keys step a slide at a time, the rail jumps to any slide, and Open at slide N goes into the editor at the slide in view.
+
+**After class.** While a class is live, the deck keeps what students asked (text only: the question, who asked, whether it was answered, and the replies; no screenshots or student ids). Its card then shows how many questions came in and how many were left open. Review class lists them slide by slide with a bar per slide, and Save the questions writes them to a Markdown file for planning the next lesson.
+
+**Editor and live room.** The LiveBoard wordmark is the way back to Presentations, which also saves the deck. The slide rail shows the number of open markers on each slide, so the teacher can see where the class is stuck without opening the queue. End class leaves the room and goes to the review. Replies are text.
+
+**Student.** The join page is a name and a code. Once a student has asked something, Keep my questions downloads their questions and the teacher's answers as a Markdown file; Import lecture in the notes app opens it as a note they can mark up and study from.
+
+Removed because they added clutter without helping a class: the web image search in replies, the sketch pad on the join page, the second button to the library, a home link that pointed at an old review site, and twelve of the fifteen sample decks.
+
+The original LiveBoard header has a **Join class** link, and Settings links to both joining and teaching. Configure `VITE_LIVEBOARD_SLIDES_URL` in the original app to point at your slideshow deployment. LiveBoard passes its current light or dark palette to the classroom, and the classroom keeps that palette in student and projector links. Live-room hosting controls require the room's host capability, which is kept in the teacher's browser.
+
+## Imports
+
+Use **Import slides** to create a deck from one PDF, a LiveBoard JSON export, or multiple PNG, JPEG, or WebP images. PDF pages and images become full-slide backgrounds that support point and region markers. Import up to 40 slides. For PowerPoint and Google Slides, export to PDF first.
 
 ## Run and validate
 
-From this directory, run `npm ci` and `npm run dev`. Live classrooms require the D1 database and all migrations in `drizzle/`. Run `npx tsc --noEmit`, `node tests/rooms.mjs`, and `npm run build` to validate.
+From this directory, run `npm ci` and `npm run dev`. Live classrooms require the D1 database and all migrations in `drizzle/`. Run `npx tsc --noEmit`, `node tests/rooms.mjs`, and `npm run build` to validate. With the dev server running, `node tests/slides-ui.cjs` from the repository root walks the whole flow in a browser (presentations, the slides viewer, a live class with a student, the after-class review and the student's take-home file).
 
 This application uses its own Vinext/Cloudflare runtime and is launched separately from the original Vite application. Hosting project identity is intentionally unset. The implementation includes browser-local host and participant capabilities, rather than school account authentication. Deployments need an appropriate audience/access configuration before classroom use. Existing legacy markers without an owner remain visible to the host.
 

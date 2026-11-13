@@ -1498,6 +1498,6 @@ html.cramming { overflow: hidden; }
 [data-tip]:focus-visible::after { opacity: 1; translate: -50% 0; }
 @media (hover: hover) { [data-tip]:hover::after { opacity: 1; translate: -50% 0; } }
 .discussion-join { display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:99px; background:var(--paper); color:var(--ink); padding:5px 10px; font:600 12px var(--display); text-decoration:none; white-space:nowrap; }
-.discussion-join:hover { border-color:var(--cobalt); color:var(--cobalt); }
-.classroom-link { display:inline-block; margin-bottom:10px; text-decoration:none; }
-@media (max-width:480px) { .top { gap:7px; } .discussion-join { padding-inline:7px; } .top .today { display:none; } }
+@media (hover: hover) { .discussion-join:hover { border-color:var(--cobalt); color:var(--cobalt); } }
+.classroom-row { margin: 0 0 10px; } .classroom-link { color: var(--cobalt); text-underline-offset: 3px; }
+@media (max-width:560px) { .top { gap:7px; } .discussion-join { padding-inline:8px; } .discussion-join .wide { display:none; } .top .today { display:none; } }
