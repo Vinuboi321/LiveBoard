@@ -15,6 +15,7 @@ const U1 = "11111111-1111-4111-8111-111111111111", U2 = "22222222-2222-4222-8222
 
   async function device() {
     const ctx = await b.newContext({ viewport: { width: 1300, height: 860 }, serviceWorkers: "block" });
+    await ctx.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
     const p = await ctx.newPage();
     p.on("pageerror", e => errs.push("pageerror: " + e.message));
     await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());

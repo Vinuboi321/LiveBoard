@@ -10,7 +10,7 @@ A checklist for a private staging deploy, then a pilot with 10–20 students. Se
 | Supabase | its own project (never share a database with production) | its own project |
 | Anthropic | its own key with a low monthly limit | its own key with a monthly limit you can afford |
 
-Secrets go only in Vercel's environment variables. Anything starting with `VITE_` is sent to the browser, so only the Supabase URL and anon key may use that prefix. `ANTHROPIC_API_KEY` must never have it.
+Secrets go only in Vercel's environment variables. Anything starting with `VITE_` is sent to the browser, so only the Supabase URL and anon key may use that prefix, plus the two public app addresses that link the notes and presentations sides (`VITE_LIVEBOARD_SLIDES_URL` here, `VITE_LIVEBOARD_NOTES_URL` in the presentations app). `ANTHROPIC_API_KEY` must never have it.
 
 ## Database
 

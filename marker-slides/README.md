@@ -18,7 +18,7 @@ Markers mean here what they mean in the notes app: a point or a region on the ma
 
 Removed because they added clutter without helping a class: the web image search in replies, the sketch pad on the join page, the second button to the library, a home link that pointed at an old review site, and twelve of the fifteen sample decks.
 
-The original LiveBoard header has a **Join class** link, and Settings links to both joining and teaching. Configure `VITE_LIVEBOARD_SLIDES_URL` in the original app to point at your slideshow deployment. LiveBoard passes its current light or dark palette to the classroom, and the classroom keeps that palette in student and projector links. Live-room hosting controls require the room's host capability, which is kept in the teacher's browser.
+The original LiveBoard header has a **Join class** link, and Settings links to both joining and teaching. Configure `VITE_LIVEBOARD_SLIDES_URL` in the original app to point at your slideshow deployment, and `VITE_LIVEBOARD_NOTES_URL` here to the notes app's address: the Presentations home then shows **Worksheets** (the notes app's worksheet studio) and **Switch to student notes**. Without it those links stay hidden, except in local development, where the notes app passes its own address. LiveBoard passes its current light or dark palette to the classroom, and the classroom keeps that palette in student and projector links. Live-room hosting controls require the room's host capability, which is kept in the teacher's browser.
 
 ## Imports
 

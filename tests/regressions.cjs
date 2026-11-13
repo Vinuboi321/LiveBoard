@@ -8,6 +8,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   const errs = [];
   const ok = (c, msg) => { if (c) console.log("ok  ", msg); else errs.push(msg); };
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: "block" });
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
   const p = await ctx.newPage();
   p.on("pageerror", e => errs.push("pageerror: " + e.message));
   await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
@@ -421,6 +422,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   // cram without AI: extra questions are built on the device from the notes, and no request leaves for the model
   {
     const c2 = await b.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: "block" });
+    await c2.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
     const q = await c2.newPage();
     q.on("pageerror", e => errs.push("pageerror: " + e.message));
     let posts = 0;
@@ -453,6 +455,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   {
     const { devices } = require("playwright");
     const c3 = await b.newContext({ ...devices["iPad Pro 11 landscape"], serviceWorkers: "block" });
+    await c3.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
     const t = await c3.newPage();
     t.on("pageerror", e => errs.push("pageerror: " + e.message));
     await t.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
@@ -478,6 +481,39 @@ const BASE = process.env.BASE || "http://localhost:4173";
     await t.waitForSelector(".mws", { timeout: 6000 }).then(() => ok(true, "a plain tap still opens the marker"), () => ok(false, "a plain tap still opens the marker"));
     ok(await t.evaluate(() => [...document.querySelectorAll("kbd")].every(k => getComputedStyle(k).display === "none")), "keyboard hints are hidden on touch");
     await c3.close();
+  }
+
+  // student or teacher: chosen once per device; students stay in the notes app, teachers go to the presentations side
+  {
+    const c4 = await b.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: "block" });
+    const r = await c4.newPage();
+    r.on("pageerror", e => errs.push("pageerror: " + e.message));
+    await r.route(/fonts\.(googleapis|gstatic)\.com/, x => x.abort());
+    await r.route("**/api/marker", x => x.fulfill({ json: { ai: false } }));
+    const slidesHits = [];
+    await c4.route(u => /marker-slides/.test(u.hostname), x => { slidesHits.push(x.request().url()); return x.fulfill({ contentType: "text/html", body: "<title>Presentations</title><h1>Presentations</h1>" }); });
+    await r.goto(BASE);
+    await r.waitForSelector(".rolepick");
+    ok(!(await r.$(".fcard")), "on first open, the role choice comes before any notes are shown");
+    await r.click('.rolechoice[data-role="student"]');
+    await r.waitForSelector(".fcard");
+    ok(!(await r.$(".rolepick")) && await r.evaluate(() => localStorage.getItem("liveboard-role")) === "student", "choosing student opens the notes and remembers it");
+    ok(!(await r.isVisible("#teacherLink")) && !(await r.isVisible("#presentationsLink")) && await r.isVisible("#discussionJoin"), "students see Join class, not the teaching tools");
+    await r.reload(); await r.waitForSelector(".fcard");
+    ok(!(await r.$(".rolepick")), "the choice isn't asked again");
+    await r.click("#settingsBtn"); await r.waitForSelector("#sRole");
+    const nav = r.waitForURL(u => /marker-slides/.test(u.hostname), { timeout: 8000 });
+    await r.click("#sRole");
+    await nav.then(() => ok(true, "Switch to teacher in Settings goes to the presentations side"), () => ok(false, "Switch to teacher in Settings goes to the presentations side"));
+    const back = new URL(slidesHits.at(-1)).searchParams.get("notes");
+    ok(back && back.startsWith(new URL(BASE).origin), "the presentations side is told where the notes app is, for its way back");
+    await r.goto(BASE);
+    await r.waitForURL(u => /marker-slides/.test(u.hostname), { timeout: 8000 }).then(() => ok(true, "a teacher opening LiveBoard lands on presentations"), () => ok(false, "a teacher opening LiveBoard lands on presentations"));
+    await r.goto(BASE + "#teacher"); await r.waitForTimeout(800);
+    ok(new URL(r.url()).hostname === new URL(BASE).hostname && await r.isVisible("#teacherLink") && await r.isVisible("#presentationsLink") && !(await r.isVisible("#discussionJoin")), "a teacher can still open Worksheets here, with teaching tools in the header");
+    await r.goto(BASE + "?as=student"); await r.waitForSelector(".fcard");
+    ok(await r.evaluate(() => localStorage.getItem("liveboard-role")) === "student" && !new URL(r.url()).searchParams.has("as"), "the presentations side's Switch to student notes link sets the role and tidies the address");
+    await c4.close();
   }
 
   await b.close();

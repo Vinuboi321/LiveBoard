@@ -10,6 +10,7 @@ const BASE = process.env.BASE || "http://localhost:4173";
   const errs = [];
   const ok = (c, msg) => { if (c) console.log("ok  ", msg); else errs.push(msg); };
   const ctx = await b.newContext({ viewport: { width: 1400, height: 900 }, serviceWorkers: "block" });
+  await ctx.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
   const p = await ctx.newPage();
   p.on("pageerror", e => errs.push("pageerror: " + e.message));
   await p.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());

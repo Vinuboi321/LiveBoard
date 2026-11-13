@@ -22,6 +22,7 @@ const quizAsks = [];
   const log = (...a) => console.log(...a);
   async function setup(w, h, dark) {
     const ctx = await b.newContext({ viewport: { width: w, height: h }, colorScheme: dark ? "dark" : "light", serviceWorkers: "block" });
+    await ctx.addInitScript(() => { try { if (!localStorage.getItem("liveboard-role")) localStorage.setItem("liveboard-role", "student"); } catch {} }); // the role picker is covered on its own
     const p = await ctx.newPage();
     p.on("pageerror", e => errs.push(`[${w}] pageerror: ${e.message}`));
     p.on("console", m => { if (m.type() === "error" && !/fonts\.g|ERR_TUNNEL|net::/.test(m.text())) errs.push(`[${w}] console: ${m.text()}`); });

@@ -1,6 +1,6 @@
 # Teacher Studio
 
-Teacher Studio extends the original LiveBoard application at `#teacher`. The header links to it; Student notes returns to the original note dial.
+Teacher Studio (shown to teachers as **Worksheets**) extends the original LiveBoard application at `#teacher`. Teachers reach it from Worksheets on the Presentations home or in the header; the header's Presentations link and the LiveBoard wordmark go back to Presentations.
 
 ## Authoring a lesson
 

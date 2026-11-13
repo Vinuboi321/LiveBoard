@@ -12,6 +12,7 @@ import { bootOwner, claimSignedOutNotes, initSync, migrateLegacyShared, push, si
 import { $, debounce, esc, reducedMotion, toast } from "./util";
 import { newMarker } from "./store";
 import { renderTeacher } from "./teacher/workspace";
+import { getRole, pickRole, roleFromAddress } from "./role";
 
 const stage = () => $("#stage")!;
 let currentNote: string | null = null;
@@ -22,6 +23,8 @@ async function route() {
   const revision = ++routeRevision;
   closeTeacher?.(); closeTeacher = null;
   const teacher = location.hash === "#teacher";
+  // a teacher's home is the presentations side; Worksheets (#teacher) and any note link still open here
+  if (!import.meta.env.VITE_ARTIFACT && !teacher && !location.hash && getRole() === "teacher" && toPresentations()) return;
   document.querySelector('#teacherLink')?.setAttribute('aria-current', teacher ? 'page' : 'false');
   if (teacher) {
     destroyHome();
@@ -168,7 +171,21 @@ async function seedWelcome() {
   await putMeta({ seeded: true, welcomeId: n.id });
 }
 
+/** Sends a teacher to the presentations side. The preview can't leave its frame, so there it opens a new tab instead. */
+function toPresentations() {
+  if (import.meta.env.VITE_ARTIFACT) { window.open(classroomUrl("teacher"), "_blank", "noopener"); return false; }
+  location.replace(classroomUrl("teacher"));
+  return true;
+}
+
 async function boot() {
+  // Students get the notes app, teachers the presentations side; the choice is made once per device.
+  roleFromAddress();
+  let role = getRole();
+  const picked = !role;
+  if (role) document.documentElement.dataset.role = role;
+  else role = await pickRole();
+  if (role === "teacher" && !location.hash && (picked || !import.meta.env.VITE_ARTIFACT) && toPresentations()) return;
   $("#today")!.textContent = new Date().toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   // Whose notes these are is settled before anything is shown, so one account's notes never flash up for another.
   await migrateLegacyShared().catch(e => console.warn("legacy move", e));
@@ -181,7 +198,8 @@ async function boot() {
   const tb = $("#themeBtn")!, labelTheme = () => tb.setAttribute("aria-label", isDark() ? "Switch to light mode" : "Switch to dark mode");
   tb.onclick = toggleTheme; onTheme(labelTheme); labelTheme();
   const join = $("#discussionJoin") as HTMLAnchorElement;
-  const updateJoin = () => { join.href = classroomUrl("student"); };
+  const pres = $("#presentationsLink") as HTMLAnchorElement;
+  const updateJoin = () => { join.href = classroomUrl("student"); pres.href = classroomUrl("teacher"); };
   updateJoin();
   onTheme(updateJoin);
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);

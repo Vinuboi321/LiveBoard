@@ -4,11 +4,14 @@ import { createClass, currentUser, deleteAccountData, reuploadAfterErase, joinCl
 import { MAX_BACKUP_BYTES, validateBackup } from "./backup";
 import { $, armButton, esc, toast } from "./util";
 import { isDark, setTheme, themeChoice, type ThemeChoice } from "./theme";
+import { getRole, setRole, type Role } from "./role";
 
 export function classroomUrl(role: "student" | "teacher") {
   const url = new URL(import.meta.env.VITE_LIVEBOARD_SLIDES_URL || "https://liveboard-marker-slides.vmenon7433577.chatgpt.site");
   if (role === "student") url.searchParams.set("view", "student");
   url.searchParams.set("theme", isDark() ? "dark" : "light");
+  // lets the presentations side link back here (it only trusts the configured address or this computer)
+  if (/^https?:$/.test(location.protocol)) url.searchParams.set("notes", location.origin + location.pathname);
   return url.href;
 }
 
@@ -35,7 +38,9 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   const courses = liveCourses();
   $("#sBody", panel)!.innerHTML = `
     <section id="account"><h3>Account</h3>
-      <p class="muted classroom-row">In class: <a class="classroom-link" id="studentDiscussion" href="${esc(classroomUrl("student"))}">Join a live lesson</a> with your teacher's code, or <a class="classroom-link" id="teacherPresentation" href="${esc(classroomUrl("teacher"))}">teach with your slides</a>.</p>
+      ${getRole() === "teacher"
+        ? `<p class="muted classroom-row">You're using LiveBoard as a <b>teacher</b>: <a class="classroom-link" id="teacherPresentation" href="${esc(classroomUrl("teacher"))}">Presentations</a> and live classes, plus <a class="classroom-link" href="#teacher">Worksheets</a> from your PDFs. <button class="linkbtn" id="sRole" data-to="student">Switch to student</button></p>`
+        : `<p class="muted classroom-row">You're using LiveBoard as a <b>student</b>. In class, <a class="classroom-link" id="studentDiscussion" href="${esc(classroomUrl("student"))}">join a live lesson</a> with your teacher's code. <button class="linkbtn" id="sRole" data-to="teacher">Switch to teacher</button></p>`}
       ${!syncConfigured() ? `<p class="muted">Sync isn't set up on this server, so notes are saved on this device only. Export a backup below to move them.</p>`
         : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.${pendingCount() ? ` <span class="muted">${pendingCount()} change${pendingCount() === 1 ? "" : "s"} waiting to upload.</span>` : ""}</p>
           <div class="row"><button class="btn" id="sOut">Sign out</button><button class="btn" id="sOutRemove" title="Also delete this account's notes from this device once they're uploaded">Sign out and remove from this device</button></div>
@@ -72,6 +77,13 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   panel.querySelectorAll<HTMLElement>("[data-theme-pick]").forEach(b => b.onclick = () => {
     setTheme(b.dataset.themePick as ThemeChoice);
     panel!.querySelectorAll("[data-theme-pick]").forEach(x => x.setAttribute("aria-checked", String(x === b)));
+  });
+  $("#sRole", panel)!.addEventListener("click", e => {
+    const to = (e.currentTarget as HTMLElement).dataset.to as Role;
+    setRole(to);
+    closeSettings();
+    if (to === "teacher" && !import.meta.env.VITE_ARTIFACT) location.assign(classroomUrl("teacher"));
+    else { if (to === "teacher") window.open(classroomUrl("teacher"), "_blank", "noopener"); if (location.hash) location.hash = ""; else onChanged?.(); }
   });
   const name = $("#sName", panel) as HTMLInputElement;
   name.onchange = () => putMeta({ displayName: name.value.trim() });

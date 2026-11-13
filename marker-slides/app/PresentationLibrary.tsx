@@ -5,6 +5,7 @@ import { importAccept,importPresentation } from './importPresentation';
 import { sampleDecks } from './sampleDecks';
 import { initialSlides } from './data';
 import { SlideFace,SlideThumb } from './SlideFace';
+import { notesLink } from './notesLink';
 
 /* The teacher's home: every presentation in this browser.
 
@@ -167,6 +168,8 @@ export default function PresentationLibrary({renderVisual}:{renderVisual:(type:s
   const words=search.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const ordered=decks.filter(deck=>groups.every(([key])=>!filters[key]||deck[key]===filters[key])&&words.every(word=>[deck.title,deck.className,deck.unit,deck.topic].join(' ').toLowerCase().includes(word))).sort((a,b)=>
     order==='updated'?b.updated-a.updated:a[order].localeCompare(b[order],undefined,{numeric:true,sensitivity:'base'})||a.title.localeCompare(b.title));
+  const [links,setLinks]=useState<{lessons?:string|null,student?:string|null}>({});
+  useEffect(()=>setLinks({lessons:notesLink('teacher','#teacher'),student:notesLink('student')}),[]);
   const taught=decks.filter(deck=>deck.lastSession),collected=taught.reduce((n,deck)=>n+deck.lastSession!.total,0),examples=decks.filter(isExample);
   const exampleMarker=viewer?.sampleMarkers?.find(marker=>marker.id===markerId);
   const peak=review?.lastSession?Math.max(1,...review.lastSession.bySlide):1;
@@ -175,6 +178,8 @@ export default function PresentationLibrary({renderVisual}:{renderVisual:(type:s
     <header className="library-header"><div><span className="brand library-brand"><span className="brandmark"><i/><i/><i/></span>LiveBoard<span className="brand-tag">SLIDES</span></span><h1>Presentations</h1>
       <p className="library-stats">{decks.length} presentation{decks.length===1?'':'s'}{taught.length?<> · {taught.length} taught live · {collected} question{collected===1?'':'s'} from your classes</>:<> · teach one live to collect your class’s questions here</>}</p></div>
       <div className="library-header-actions">
+        {links.lessons&&<a className="outline" href={links.lessons} title="Turn a PDF or document into a worksheet with marker questions and hints">Worksheets</a>}
+        {links.student&&<a className="library-switch" href={links.student} title="Use LiveBoard as a student on this device">Switch to student notes</a>}
         <input ref={fileInput} type="file" accept={importAccept} multiple hidden onChange={event=>{const files=Array.from(event.target.files||[]);event.target.value='';void importFiles(files)}}/>
         <button className="outline" disabled={busy} onClick={()=>fileInput.current?.click()} title="A PDF, a LiveBoard file, or PNG, JPEG and WebP images. From PowerPoint or Google Slides, export a PDF first.">Import slides</button>
         <button className="primary" disabled={busy} onClick={create}>New presentation</button>

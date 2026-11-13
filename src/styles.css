@@ -1503,3 +1503,19 @@ html.cramming { overflow: hidden; }
 @media (max-width:560px) { .top { gap:7px; } .discussion-join { padding-inline:8px; } .discussion-join .wide { display:none; } .top .today { display:none; } }
 /* on a phone the header keeps its mark and drops the wordmark, so Join class and the tools all fit without sideways scroll */
 @media (max-width: 440px) { .brand .brandname { display: none; } }
+
+/* Student or teacher: chosen once per device (src/role.ts). Students see study tools; teachers see their teaching tools. */
+:root:not([data-role="teacher"]) .teacheronly, :root[data-role="teacher"] .studentonly { display: none !important; }
+.top a.teacheronly { text-decoration: none; }
+.rolecard:focus { outline: none; }
+.rolepick { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; padding: 16px; background: var(--desk); }
+.rolecard { width: min(560px, 100%); text-align: center; }
+.rolecard h1 { font: 700 clamp(26px, 5vw, 36px) var(--display); margin: 0 0 6px; color: var(--ink); }
+.rolechoices { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 22px 0 14px; }
+.rolechoice { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; text-align: left; padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--paper); color: var(--ink); font: inherit; cursor: pointer; min-height: 120px; }
+.rolechoice b { font: 700 18px var(--display); }
+.rolechoice span { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.rolechoice:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@media (hover: hover) { .rolechoice:hover { border-color: var(--ink); } }
+@media (max-width: 480px) { .rolechoices { grid-template-columns: 1fr; } .rolechoice { min-height: 0; } }
+.linkbtn { border: 0; background: none; padding: 0; font: inherit; color: var(--ink); text-decoration: underline; cursor: pointer; }

@@ -18,6 +18,12 @@ const ok = (cond, msg) => { console.log((cond ? "ok   " : "FAIL ") + msg); if (!
   const shot = async (p, name) => { if (OUT) await p.screenshot({ path: `${OUT}/${name}.png` }); };
 
   // --- the presentations home ---
+  // the way back to the notes app: shown only for an address it can trust (here, this computer)
+  await t.goto(BASE + "/?view=library&notes=" + encodeURIComponent("https://evil.example/")); await t.waitForSelector(".deck-grid li");
+  ok(!(await t.$(".library-switch")), "a link to some other site passed in the address isn't turned into a way back");
+  await t.goto(BASE + "/?view=library&notes=" + encodeURIComponent("http://127.0.0.1:4173/")); await t.waitForSelector(".library-switch");
+  const back = { student: await t.getAttribute(".library-switch", "href"), lessons: await t.getAttribute('a[title^="Turn a PDF"]', "href") };
+  ok(back.student === "http://127.0.0.1:4173/?as=student" && back.lessons === "http://127.0.0.1:4173/?as=teacher#teacher", "Presentations links to Worksheets and to Switch to student notes in the notes app");
   await t.goto(BASE + "/?view=library&theme=dark"); await t.waitForSelector(".deck-grid li");
   ok((await t.$$(".deck-grid li")).length === 3, "a new browser starts with three example decks, one per subject");
   ok(!(await t.$(".classroom-home")), "the home page has no button that only leads back to itself");
