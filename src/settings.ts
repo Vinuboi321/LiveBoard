@@ -6,7 +6,7 @@ import { $, armButton, esc, toast } from "./util";
 import { isDark, setTheme, themeChoice, type ThemeChoice } from "./theme";
 
 export function classroomUrl(role: "student" | "teacher") {
-  const url = new URL(import.meta.env.VITE_LIVEBOARD_SLIDES_URL || "https://liveboard-marker-slides.zippybeach4.chatgpt.site");
+  const url = new URL(import.meta.env.VITE_LIVEBOARD_SLIDES_URL || "https://liveboard-marker-slides.vmenon7433577.chatgpt.site");
   if (role === "student") url.searchParams.set("view", "student");
   url.searchParams.set("theme", isDark() ? "dark" : "light");
   return url.href;
