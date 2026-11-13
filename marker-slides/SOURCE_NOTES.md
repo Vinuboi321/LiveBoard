@@ -1,0 +1,6 @@
+# LiveBoard Marker Slides
+Fresh slideshow-focused implementation. Marker appearance and interaction model adapted from https://github.com/Vinuboi321/LiveBoard, specifically `src/styles.css` `.pin.free` (20 px free-positioned circle, 3 px type-colored border and stem) and `src/editor/markerBox.ts` contextual marker workspace. Original palette and Bricolage Grotesque typography retained. The original application has not been modified.
+
+Teachers create rooms with immutable slide snapshots, advance the class, open timed question windows, reply, attach Wikimedia Commons images and resolve markers. Students join by room code, follow the live position or revisit prior slides, and place questions during question time. D1 stores classrooms, normalized-coordinate markers and replies. Host capabilities are random UUID secrets, kept in this browser and checked server-side. A room code permits student reads and contributions; it is not intended for sensitive personal data. Private Site access is an additional gate, and must be shared before students can visit.
+
+Demo data is explicitly labeled. Sample classroom state exists in React only; Start live creates a clean persistent classroom. No AI-generated answer or media capabilities are represented as operational. Image search uses Wikimedia Commons and retains source links; review the source for reuse terms.

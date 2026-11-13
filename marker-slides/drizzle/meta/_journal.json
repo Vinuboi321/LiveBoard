@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1794373730311,
+      "tag": "0000_yielding_sinister_six",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794374713887,
+      "tag": "0001_jazzy_skaar",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794376156565,
+      "tag": "0002_black_magneto",
+      "breakpoints": true
+    }
+  ]
+}
