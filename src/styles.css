@@ -1501,3 +1501,5 @@ html.cramming { overflow: hidden; }
 @media (hover: hover) { .discussion-join:hover { border-color:var(--cobalt); color:var(--cobalt); } }
 .classroom-row { margin: 0 0 10px; } .classroom-link { color: var(--cobalt); text-underline-offset: 3px; }
 @media (max-width:560px) { .top { gap:7px; } .discussion-join { padding-inline:8px; } .discussion-join .wide { display:none; } .top .today { display:none; } }
+/* on a phone the header keeps its mark and drops the wordmark, so Join class and the tools all fit without sideways scroll */
+@media (max-width: 440px) { .brand .brandname { display: none; } }
