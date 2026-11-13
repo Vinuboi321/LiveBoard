@@ -5,7 +5,7 @@ initTheme(); // before anything renders, so there is no flash of the other theme
 import { cardFor, destroyHome, diveInto, queueRecall, takeSwipe, installHomeListeners, renderHome, setFocusNote, homeAlive, inRecall } from "./home/home";
 import { destroyNote, flushNote, renderNote } from "./editor/noteView";
 import { fileToHtml } from "./importers";
-import { openSettings } from "./settings";
+import { classroomUrl, openSettings } from "./settings";
 import { openSearch } from "./search";
 import { ensureStarterCourse, liveCourses, liveNotes, markersOf, newNote, note, onChange, openStore, putMarker, putMeta, putNote, state, deleteNote } from "./store";
 import { bootOwner, claimSignedOutNotes, initSync, migrateLegacyShared, push, signedOutNotes } from "./sync";
@@ -180,6 +180,10 @@ async function boot() {
   installHomeListeners();
   const tb = $("#themeBtn")!, labelTheme = () => tb.setAttribute("aria-label", isDark() ? "Switch to light mode" : "Switch to dark mode");
   tb.onclick = toggleTheme; onTheme(labelTheme); labelTheme();
+  const join = $("#discussionJoin") as HTMLAnchorElement;
+  const updateJoin = () => { join.href = classroomUrl("student"); };
+  updateJoin();
+  onTheme(updateJoin);
   $("#settingsBtn")!.onclick = () => openSettings(undefined, refresh);
   // a study session ends with a quiz, on the dial, of exactly what was marked during it
   initSession({ exitTicket: ids => { queueRecall(ids, "Exit ticket"); if (location.hash.startsWith("#note-")) goHome(); } });

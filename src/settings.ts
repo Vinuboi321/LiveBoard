@@ -3,7 +3,14 @@ import { blockedCount, course, exportAll, liveCourses, pendingCount, putCourse, 
 import { createClass, currentUser, deleteAccountData, reuploadAfterErase, joinClass, signIn, signOut, syncConfigured, verifyCode } from "./sync";
 import { MAX_BACKUP_BYTES, validateBackup } from "./backup";
 import { $, armButton, esc, toast } from "./util";
-import { setTheme, themeChoice, type ThemeChoice } from "./theme";
+import { isDark, setTheme, themeChoice, type ThemeChoice } from "./theme";
+
+export function classroomUrl(role: "student" | "teacher") {
+  const url = new URL(import.meta.env.VITE_LIVEBOARD_SLIDES_URL || "https://liveboard-marker-slides.vmenon7433577.chatgpt.site");
+  if (role === "student") url.searchParams.set("view", "student");
+  url.searchParams.set("theme", isDark() ? "dark" : "light");
+  return url.href;
+}
 
 /* Settings: account, AI status, courses and classes, backup. */
 function blockedReasons() {
@@ -27,7 +34,8 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   const user = currentUser();
   const courses = liveCourses();
   $("#sBody", panel)!.innerHTML = `
-    <section><h3>Account</h3>
+    <section id="account"><h3>Account</h3>
+      <p class="muted classroom-row">In class: <a class="classroom-link" id="studentDiscussion" href="${esc(classroomUrl("student"))}">Join a live lesson</a> with your teacher's code, or <a class="classroom-link" id="teacherPresentation" href="${esc(classroomUrl("teacher"))}">teach with your slides</a>.</p>
       ${!syncConfigured() ? `<p class="muted">Sync isn't set up on this server, so notes are saved on this device only. Export a backup below to move them.</p>`
         : user ? `<p>Signed in as <b>${esc(user.email)}</b>. Notes sync across your devices.${pendingCount() ? ` <span class="muted">${pendingCount()} change${pendingCount() === 1 ? "" : "s"} waiting to upload.</span>` : ""}</p>
           <div class="row"><button class="btn" id="sOut">Sign out</button><button class="btn" id="sOutRemove" title="Also delete this account's notes from this device once they're uploaded">Sign out and remove from this device</button></div>
@@ -51,7 +59,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       <div class="clist">${courses.map(c => `<div class="crow" data-id="${c.id}"><span class="dot" style="background:${c.color}"></span><input class="cname" value="${esc(c.name)}" maxlength="32" aria-label="Course name">
         <label class="exam" title="Exam date, used by “remind me before the exam”"><span>Exam</span><input type="date" class="cexam" value="${esc(c.examDate || "")}" aria-label="Exam date for ${esc(c.name)}"></label>
         ${c.classCode ? `<span class="code" title="Class code">${esc(c.classCode)}</span>` : `<button class="btn small" data-share="${c.id}" ${user ? "" : "disabled title='Sign in first'"}>Share as class</button>`}</div>`).join("")}</div>
-      <form class="row" id="sJoin"><input id="sCode" maxlength="8" placeholder="Class code" ${user ? "" : "disabled"}><select id="sJoinCourse" aria-label="Put this class on course" ${user ? "" : "disabled"}>${courses.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><button class="btn" ${user ? "" : "disabled"}>Join class</button></form>
+      <form class="row" id="sJoin"><input id="sClassCode" maxlength="8" placeholder="Class code" ${user ? "" : "disabled"}><select id="sJoinCourse" aria-label="Put this class on course" ${user ? "" : "disabled"}>${courses.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select><button class="btn" ${user ? "" : "disabled"}>Join class</button></form>
       ${user ? "" : `<p class="muted small">${syncConfigured() ? "Sign in to share or join a class." : "Classes need accounts, which aren't set up on this server."}</p>`}
     </section>
     <section><h3>Backup</h3>
@@ -60,7 +68,6 @@ export async function openSettings(section?: string, onChanged?: () => void) {
       ${user ? `<button class="btn danger" id="sDelServer">Delete my account data</button><p class="muted small">Deletes everything this account stored online and the copy on this device, including changes that haven't uploaded. Download a backup first if you want to keep anything. Other devices signed in to this account keep their own copies but can no longer upload them.</p>` : ""}
     </section>
     <p class="muted small">LiveBoard · notes are stored on your device${syncConfigured() ? " and, when signed in, in your account" : ""}.</p>`;
-
   panel.querySelectorAll<HTMLButtonElement>("[data-export]").forEach(b => b.onclick = () => ($("#sExport", panel!) as HTMLButtonElement | null)?.click());
   panel.querySelectorAll<HTMLElement>("[data-theme-pick]").forEach(b => b.onclick = () => {
     setTheme(b.dataset.themePick as ThemeChoice);
@@ -92,7 +99,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
     e.preventDefault();
     const email = ($("#sEmail", panel!) as HTMLInputElement).value.trim(), code = ($("#sCodeIn", panel!) as HTMLInputElement).value.trim();
     if (!code) return;
-    try { await verifyCode(email, code); toast("Signed in."); }
+    try { await verifyCode(email, code); toast("Signed in."); void openSettings("account", onChanged); }
     catch (err) { toast((err as Error).message, 6000); }
   });
   const delSrv = $("#sDelServer", panel);
@@ -132,7 +139,7 @@ export async function openSettings(section?: string, onChanged?: () => void) {
   });
   ($("#sJoin", panel) as HTMLFormElement).onsubmit = async e => {
     e.preventDefault();
-    const code = ($("#sCode", panel!) as HTMLInputElement).value;
+    const code = ($("#sClassCode", panel!) as HTMLInputElement).value;
     const c = course(($("#sJoinCourse", panel!) as HTMLSelectElement).value);
     if (!code.trim() || !c) return;
     try {

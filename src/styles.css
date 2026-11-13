@@ -1497,3 +1497,9 @@ html.cramming { overflow: hidden; }
 [data-tip]::after { content: attr(data-tip); position: absolute; left: 50%; top: calc(100% + 9px); translate: -50% -4px; width: max-content; max-width: 230px; white-space: normal; text-align: left; font: 500 12.5px/1.4 var(--display); letter-spacing: 0; text-transform: none; color: var(--paper); background: var(--ink); border-radius: 10px; padding: 8px 11px; box-shadow: 0 10px 24px -8px rgba(8, 8, 30, .5); opacity: 0; pointer-events: none; transition: opacity .15s .25s, translate .15s .25s; z-index: 5; }
 [data-tip]:focus-visible::after { opacity: 1; translate: -50% 0; }
 @media (hover: hover) { [data-tip]:hover::after { opacity: 1; translate: -50% 0; } }
+.discussion-join { display:inline-flex; align-items:center; justify-content:center; border:1px solid var(--line); border-radius:99px; background:var(--paper); color:var(--ink); padding:5px 10px; font:600 12px var(--display); text-decoration:none; white-space:nowrap; }
+@media (hover: hover) { .discussion-join:hover { border-color:var(--cobalt); color:var(--cobalt); } }
+.classroom-row { margin: 0 0 10px; } .classroom-link { color: var(--cobalt); text-underline-offset: 3px; }
+@media (max-width:560px) { .top { gap:7px; } .discussion-join { padding-inline:8px; } .discussion-join .wide { display:none; } .top .today { display:none; } }
+/* on a phone the header keeps its mark and drops the wordmark, so Join class and the tools all fit without sideways scroll */
+@media (max-width: 440px) { .brand .brandname { display: none; } }
