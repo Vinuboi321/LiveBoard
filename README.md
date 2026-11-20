@@ -4,6 +4,10 @@ A study notes app where **markers are the only tool**. Import a lecture or start
 
 LiveBoard installs as an app on iPad, iPhone, Windows and Mac from the browser, and it works offline. Notes live on the device first. When accounts are set up, they also sync to Supabase.
 
+## Standalone classroom app
+
+Download `standalone/LiveBoard.html` and open it in your browser. Choose Education, then Teacher, to use presentation search, class filters and marker conversations. The file runs locally without Node.js or a ChatGPT account. Cross-device live lessons require a configured classroom backend.
+
 ## What's in it
 
 **Home: the time dial.** Notes sit around a ring by when you last opened them. The 3 most recent float as large cards, older notes stack in colored folders (This week, This month, Last month, then one folder for everything older), and folders fan open on hover or when spun under the pointer. Import and Blank page live in the center hub. The hub itself is calm, neutral glass, so the color stays with the folders and files. The ring around it is the time scale, drawn in quiet ink with only the selected item's stretch lit in its color. A bezel of fine ticks turns with the dial and swells under the pointer, small study sprites (bits of maths and science, tiny graphs, an atom, a grade) drift along the track and are dragged when you spin, a ring runs outward each time something new lands under the pointer, and the hub leans toward the cursor (all drawn on one canvas, `src/home/bezel.ts`, and still under reduced motion). Each note card carries a memory fingerprint, one dot per marker, filled by how well you know it. Opening a note grows its card into the page.
